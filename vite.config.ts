@@ -5,7 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 function ghostApkServerPlugin(): Plugin {
-  const apkRelPath = 'releases/Ghost-v1.1.0.apk';
+  const apkRelPath = 'releases/Ghost-v1.2.0.apk';
   const metaRelPath = 'releases/apk-metadata.json';
 
   const attachMiddlewares = (middlewares: {
@@ -14,10 +14,7 @@ function ghostApkServerPlugin(): Plugin {
     middlewares.use((req, res, next) => {
       const url = (req.url || '').split('?')[0];
 
-      if (
-        url === '/downloads/Ghost-v1.1.0.apk' ||
-        url === '/downloads/Ghost-v1.0.0.apk'
-      ) {
+      if (url.startsWith('/downloads/Ghost-v') && url.endsWith('.apk')) {
         const apkPath = path.resolve(process.cwd(), apkRelPath);
         if (!fs.existsSync(apkPath)) {
           res.statusCode = 404;
@@ -30,7 +27,7 @@ function ghostApkServerPlugin(): Plugin {
         res.setHeader('Content-Type', 'application/vnd.android.package-archive');
         res.setHeader(
           'Content-Disposition',
-          'attachment; filename="Ghost-v1.1.0.apk"'
+          'attachment; filename="Ghost-v1.2.0.apk"'
         );
         res.setHeader('Content-Length', String(stat.size));
         res.setHeader('Cache-Control', 'no-cache');
@@ -55,10 +52,10 @@ function ghostApkServerPlugin(): Plugin {
           res.end(
             JSON.stringify({
               available: true,
-              fileName: 'Ghost-v1.1.0.apk',
+              fileName: 'Ghost-v1.2.0.apk',
               packageName: 'ai.ghost.agent',
-              versionName: '1.1.0',
-              versionCode: 2,
+              versionName: '1.2.0',
+              versionCode: 3,
               minSdk: 26,
               targetSdk: 34,
               sizeBytes: buf.length,

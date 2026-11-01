@@ -2,7 +2,6 @@ package ai.ghost.agent;
 
 import android.Manifest;
 import android.app.AlarmManager;
-import android.app.KeyguardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -17,10 +16,10 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class GhostNativeBridge {
-    private final Context context;
+    private final MainActivity activity;
 
-    public GhostNativeBridge(Context context) {
-        this.context = context;
+    public GhostNativeBridge(MainActivity activity) {
+        this.activity = activity;
     }
 
     @JavascriptInterface
@@ -29,21 +28,17 @@ public class GhostNativeBridge {
             JSONObject obj = new JSONObject();
             obj.put("isNativeApk", true);
             obj.put("deviceModel", Build.MANUFACTURER + " " + Build.MODEL);
-            obj.put("androidVersion", "Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")");
+            obj.put("androidVersion", "Android " + Build.VERSION.RELEASE);
             obj.put("accessibilityEnabled", isAccessibilityServiceEnabled());
 
-            AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+            AlarmManager am = (AlarmManager) activity.getSystemService(Context.ALARM_SERVICE);
             boolean alarmOk = true;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && am != null) {
                 alarmOk = am.canScheduleExactAlarms();
             }
             obj.put("exactAlarmAllowed", alarmOk);
-            obj.put("overlayAllowed", Settings.canDrawOverlays(context));
 
-            KeyguardManager km = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
-            obj.put("devicePinLocked", km != null && km.isDeviceSecure());
-
-            PackageManager pm = context.getPackageManager();
+            PackageManager pm = activity.getPackageManager();
             boolean wa = GhostTaskScheduler.isPackageInstalled(pm, "com.whatsapp")
                     || GhostTaskScheduler.isPackageInstalled(pm, "com.whatsapp.w4b");
             obj.put("whatsappInstalled", wa);
@@ -54,20 +49,25 @@ public class GhostNativeBridge {
     }
 
     private boolean isAccessibilityServiceEnabled() {
-        String expected = context.getPackageName() + "/" + GhostAccessibilityService.class.getName();
+        String expected = activity.getPackageName() + "/" + GhostAccessibilityService.class.getName();
         String enabled = Settings.Secure.getString(
-                context.getContentResolver(),
+                activity.getContentResolver(),
                 Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         );
         return enabled != null && enabled.contains(expected);
     }
 
     @JavascriptInterface
+    public void pickPhoneContact() {
+        activity.launchSystemContactPicker();
+    }
+
+    @JavascriptInterface
     public String scheduleTask(String taskJson) {
         try {
             JSONObject task = new JSONObject(taskJson);
-            GhostTaskStore.upsertTask(context, task);
-            long triggerAt = GhostTaskScheduler.scheduleAlarmForTask(context, task);
+            GhostTaskStore.upsertTask(activity, task);
+            long triggerAt = GhostTaskScheduler.scheduleAlarmForTask(activity, task);
             JSONObject res = new JSONObject();
             res.put("ok", true);
             res.put("triggerAtMillis", triggerAt);
@@ -80,15 +80,15 @@ public class GhostNativeBridge {
     @JavascriptInterface
     public void cancelTask(String taskId) {
         if (taskId == null) return;
-        GhostTaskScheduler.cancelAlarmForTask(context, taskId);
-        GhostTaskStore.removeTask(context, taskId);
+        GhostTaskScheduler.cancelAlarmForTask(activity, taskId);
+        GhostTaskStore.removeTask(activity, taskId);
     }
 
     @JavascriptInterface
     public String executeTaskNow(String taskJson) {
         try {
             JSONObject task = new JSONObject(taskJson);
-            GhostTaskScheduler.launchWhatsAppTaskNow(context, task);
+            GhostTaskScheduler.launchWhatsAppTaskNow(activity, task);
             return "{\"ok\":true}";
         } catch (Exception e) {
             return "{\"ok\":false}";
@@ -97,58 +97,38 @@ public class GhostNativeBridge {
 
     @JavascriptInterface
     public void emergencyStop() {
-        GhostTaskStore.setPendingActiveRun(context, null);
-        context.stopService(new Intent(context, GhostForegroundService.class));
+        GhostTaskStore.setPendingActiveRun(activity, null);
+        activity.stopService(new Intent(activity, GhostForegroundService.class));
     }
 
     @JavascriptInterface
     public void openAccessibilitySettings() {
         Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        context.startActivity(intent);
+        activity.startActivity(intent);
     }
 
     @JavascriptInterface
     public void openExactAlarmSettings() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
-            intent.setData(Uri.parse("package:" + context.getPackageName()));
+            intent.setData(Uri.parse("package:" + activity.getPackageName()));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            context.startActivity(intent);
+            activity.startActivity(intent);
         }
-    }
-
-    @JavascriptInterface
-    public void openOverlaySettings() {
-        Intent intent = new Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:" + context.getPackageName())
-        );
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        context.startActivity(intent);
-    }
-
-    @JavascriptInterface
-    public void startSkillRecording(String skillName) {
-        GhostAccessibilityService.startRecordingSkill();
-    }
-
-    @JavascriptInterface
-    public String stopSkillRecording() {
-        return GhostAccessibilityService.stopRecordingSkill();
     }
 
     @JavascriptInterface
     public String getDeviceContactsJson() {
         JSONArray arr = new JSONArray();
-        if (context.checkSelfPermission(Manifest.permission.READ_CONTACTS)
+        if (activity.checkSelfPermission(Manifest.permission.READ_CONTACTS)
                 != PackageManager.PERMISSION_GRANTED) {
             return arr.toString();
         }
 
         Cursor cursor = null;
         try {
-            cursor = context.getContentResolver().query(
+            cursor = activity.getContentResolver().query(
                     ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                     new String[]{
                             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,

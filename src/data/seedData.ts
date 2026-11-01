@@ -1,239 +1,111 @@
 import type {
-  ContactProfile,
-  ExecutionReceipt,
-  GhostTask,
-  RecordedSkill,
+  SavedContact,
+  ScheduledWhatsAppTask,
+  SentHistoryItem,
 } from '../types/ghost';
 
-export const INITIAL_CONTACTS: ContactProfile[] = [
+export function formatTime12h(time24: string): string {
+  const [hStr, mStr] = time24.split(':');
+  const h = Number(hStr);
+  const m = Number(mStr);
+  if (Number.isNaN(h) || Number.isNaN(m)) return time24;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+export function getTodayOrTomorrowDate(time24: string): string {
+  const now = new Date();
+  const [hStr, mStr] = time24.split(':');
+  const target = new Date(now);
+  target.setHours(Number(hStr) || 0, Number(mStr) || 0, 0, 0);
+  if (target.getTime() <= now.getTime()) {
+    target.setDate(target.getDate() + 1);
+  }
+  const yyyy = target.getFullYear();
+  const mm = String(target.getMonth() + 1).padStart(2, '0');
+  const dd = String(target.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export function computeTriggerMillis(dateStr: string, time24: string): number {
+  const [yyyy, mm, dd] = dateStr.split('-').map(Number);
+  const [hh, min] = time24.split(':').map(Number);
+  const dt = new Date(
+    yyyy || new Date().getFullYear(),
+    (mm || 1) - 1,
+    dd || 1,
+    hh || 0,
+    min || 0,
+    0,
+    0
+  );
+  if (dt.getTime() <= Date.now()) {
+    dt.setDate(dt.getDate() + 1);
+  }
+  return dt.getTime();
+}
+
+export function makeInitials(name: string): string {
+  return (
+    name
+      .trim()
+      .split(/\s+/)
+      .map((part) => part[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2) || 'WA'
+  );
+}
+
+export const INITIAL_CONTACTS: SavedContact[] = [
   {
-    id: 'c-jasmine-personal',
-    name: 'Jasmine Sharma',
-    tag: 'Personal',
+    id: 'c-jasmine',
+    name: 'Jasmine',
     phone: '+919820448210',
-    maskedPhone: '+91 ••8210',
-    relationship: 'personal',
-    avatarInitials: 'JS',
-    preferredTone: 'Warm casual',
-    toneSample: 'good morning jas ☀️',
-    whatsappPackage: 'com.whatsapp',
-    recentMessagesNormal: [
-      {
-        id: 'm2',
-        sender: 'them',
-        text: 'Goodnight! Talk tomorrow 😊',
-        time: '10:42 PM',
-      },
-    ],
-    recentMessagesEmergency: [
-      {
-        id: 'm2',
-        sender: 'them',
-        text: 'Family emergency tonight, sleeping in—pls don’t text early',
-        time: '02:14 AM',
-        isUrgentKeyword: true,
-      },
-    ],
-  },
-  {
-    id: 'c-jasmine-work',
-    name: 'Jasmine Kapoor',
-    tag: 'Work',
-    phone: '+919811273904',
-    maskedPhone: '+91 ••3904',
-    relationship: 'work',
-    avatarInitials: 'JK',
-    preferredTone: 'Professional',
-    toneSample: 'Good morning Jasmine — quick sync later today.',
-    whatsappPackage: 'com.whatsapp.w4b',
-    recentMessagesNormal: [
-      {
-        id: 'w1',
-        sender: 'them',
-        text: 'See you at Monday standup.',
-        time: '07:15 PM',
-      },
-    ],
-    recentMessagesEmergency: [
-      {
-        id: 'w2',
-        sender: 'them',
-        text: 'Outage emergency overnight, sleeping late.',
-        time: '03:05 AM',
-        isUrgentKeyword: true,
-      },
-    ],
-  },
-  {
-    id: 'c-jasmine-group',
-    name: 'Jasmine · Trip Group',
-    tag: 'Group',
-    phone: 'group-goa-9',
-    maskedPhone: '9 members',
-    relationship: 'group',
-    avatarInitials: 'TG',
-    preferredTone: 'Casual',
-    toneSample: 'Morning everyone! Cab ready?',
-    whatsappPackage: 'com.whatsapp',
-    recentMessagesNormal: [
-      {
-        id: 'g1',
-        sender: 'them',
-        text: '5 AM airport cab confirmed?',
-        time: '11:20 PM',
-      },
-    ],
-    recentMessagesEmergency: [
-      {
-        id: 'g2',
-        sender: 'them',
-        text: 'Flight delayed—don’t wake anyone early.',
-        time: '01:50 AM',
-        isUrgentKeyword: true,
-      },
-    ],
+    initials: 'JA',
   },
   {
     id: 'c-mom',
     name: 'Mom',
-    tag: 'Family',
     phone: '+919820112233',
-    maskedPhone: '+91 ••2233',
-    relationship: 'family',
-    avatarInitials: 'MA',
-    preferredTone: 'Warm',
-    toneSample: 'Good morning Maa ❤️',
-    whatsappPackage: 'com.whatsapp',
-    recentMessagesNormal: [
-      {
-        id: 'ma1',
-        sender: 'them',
-        text: 'Wake up on time tomorrow',
-        time: '09:55 PM',
-      },
-    ],
-    recentMessagesEmergency: [
-      {
-        id: 'ma2',
-        sender: 'them',
-        text: 'Sleeping till 7 today, don’t text early',
-        time: '11:50 PM',
-        isUrgentKeyword: true,
-      },
-    ],
+    initials: 'MO',
+  },
+  {
+    id: 'c-rohan',
+    name: 'Rohan',
+    phone: '+919769044110',
+    initials: 'RO',
   },
 ];
 
-export const INITIAL_TASKS: GhostTask[] = [
+const defaultDate = getTodayOrTomorrowDate('05:00');
+
+export const INITIAL_TASKS: ScheduledWhatsAppTask[] = [
   {
-    id: 'task-seed-1',
-    rawPrompt: '5 mins after alarm, msg Mom Good morning Maa ❤️',
-    contactId: 'c-mom',
-    contactName: 'Mom',
-    contactPhone: '+919820112233',
-    targetApp: 'WhatsApp',
-    messageBody: 'Good morning Maa ❤️',
-    scheduledTime24: '06:30',
-    displayTime: 'Alarm + 5m',
-    jitterMinutes: 3,
-    effectiveTime: 'Alarm + 5m',
-    triggerType: 'alarm_dismissed',
-    triggerLabel: 'After alarm',
-    executionMode: 'hybrid_dual',
-    contextGuardEnabled: true,
-    toneMatched: true,
-    enabled: true,
-    createdAt: 'Active',
-  },
-  {
-    id: 'task-seed-2',
-    rawPrompt: 'At 5:30 AM compare Uber vs Ola to airport',
-    contactId: 'c-jasmine-personal',
-    contactName: 'Self',
+    id: 'task-jasmine-5am',
+    contactId: 'c-jasmine',
+    contactName: 'Jasmine',
     contactPhone: '+919820448210',
-    targetApp: 'Cross-App Chain',
-    messageBody: 'Send cheaper airport cab fare',
-    scheduledTime24: '05:30',
-    displayTime: '05:30 AM',
-    jitterMinutes: 2,
-    effectiveTime: '05:32 AM',
-    triggerType: 'cross_app_chain',
-    triggerLabel: 'Uber → Ola → WhatsApp',
-    executionMode: 'headless_linked',
-    contextGuardEnabled: true,
-    toneMatched: false,
+    contactInitials: 'JA',
+    messageBody: 'Good morning',
+    scheduledTime24: '05:00',
+    scheduledDate: defaultDate,
+    triggerAtMillis: computeTriggerMillis(defaultDate, '05:00'),
+    repeatMode: 'daily',
+    whatsappPackage: 'com.whatsapp',
     enabled: true,
-    createdAt: 'Active',
   },
 ];
 
-export const INITIAL_RECEIPTS: ExecutionReceipt[] = [
+export const INITIAL_HISTORY: SentHistoryItem[] = [
   {
-    id: 'rcpt-101',
-    taskId: 'task-prev-jas',
-    contactName: 'Jasmine Sharma',
-    targetApp: 'WhatsApp',
-    scheduledFor: '05:00 AM',
-    executedAt: '05:03 AM',
-    outcome: 'SENT',
-    messageText: 'Good morning',
-    reasonDetail: 'Chat checked · Delivered',
-    durationMs: 1420,
-    engineLayersUsed: ['WhatsApp'],
-    guardrailsBlocked: [],
-  },
-  {
-    id: 'rcpt-102',
-    taskId: 'task-prev-guard',
-    contactName: 'Rohan',
-    targetApp: 'WhatsApp',
-    scheduledFor: '05:15 AM',
-    executedAt: '05:17 AM',
-    outcome: 'PAUSED_CONTEXT_GUARD',
-    messageText: 'On my way to gym!',
-    reasonDetail: 'Paused · Overnight urgent text found',
-    durationMs: 890,
-    engineLayersUsed: ['Context Guard'],
-    guardrailsBlocked: [],
-  },
-];
-
-export const INITIAL_SKILLS: RecordedSkill[] = [
-  {
-    id: 'skill-wa-send',
-    name: 'WhatsApp Safe Send',
-    targetPackage: 'com.whatsapp',
-    appLabel: 'WhatsApp',
-    stepsCount: 4,
-    avgLatencyMs: 68,
-    nodePathSummary: ['Open chat → Check recent → Type → Send'],
-    parameterSlots: ['contact', 'message'],
-    lastUsed: '05:03 AM',
-  },
-  {
-    id: 'skill-blinkit-cart',
-    name: 'Blinkit Morning Cart',
-    targetPackage: 'com.grofers.customerapp',
-    appLabel: 'Blinkit',
-    stepsCount: 5,
-    avgLatencyMs: 195,
-    nodePathSummary: ['Add milk & bread → Pause before pay'],
-    parameterSlots: ['items'],
-    lastUsed: 'Yesterday',
-  },
-];
-
-export const PROMPT_PRESETS = [
-  {
-    label: 'Jasmine 5 AM',
-    prompt: 'please msg jasmine at 5 am Good morning',
-  },
-  {
-    label: 'After Alarm',
-    prompt: '5 mins after alarm msg Mom Good morning Maa ❤️',
-  },
-  {
-    label: 'Uber vs Ola',
-    prompt: 'at 5:30 am compare Uber vs Ola to airport',
+    id: 'hist-1',
+    taskId: 'task-jasmine-5am',
+    contactName: 'Jasmine',
+    contactPhone: '+919820448210',
+    messageBody: 'Good morning',
+    sentAt: '05:00 AM',
+    status: 'SENT',
   },
 ];

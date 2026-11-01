@@ -2,47 +2,44 @@ import { useEffect, useState } from 'react';
 import {
   Clock,
   Download,
-  History,
   Maximize2,
-  Shield,
+  PlusCircle,
+  Settings,
   Smartphone,
-  Sparkles,
   Wifi,
 } from 'lucide-react';
 import type {
   AndroidDeviceStatus,
   ApkMetadata,
-  ContactProfile,
-  ExecutionReceipt,
-  GhostTask,
-  RecordedSkill,
+  SavedContact,
+  ScheduledWhatsAppTask,
+  SentHistoryItem,
 } from './types/ghost';
 import {
   INITIAL_CONTACTS,
-  INITIAL_RECEIPTS,
-  INITIAL_SKILLS,
+  INITIAL_HISTORY,
   INITIAL_TASKS,
 } from './data/seedData';
 import {
   cancelNativeAlarmTask,
+  executeNativeTaskNow,
   getAndroidDeviceStatus,
   isRunningInNativeApk,
+  loadNativeContactsList,
   scheduleNativeAlarmTask,
 } from './bridge/nativeBridge';
 import { CommandDeck } from './components/CommandDeck';
 import { QueueView } from './components/QueueView';
-import { ShieldSkillsView } from './components/ShieldSkillsView';
-import { ReceiptsView } from './components/ReceiptsView';
+import { SetupView } from './components/SetupView';
 import { LiveScreenStage } from './components/LiveScreenStage';
 import { ApkStudioModal } from './components/ApkStudioModal';
 
-type ActiveTab = 'command' | 'queue' | 'shield' | 'receipts';
+type ActiveTab = 'new' | 'scheduled' | 'setup';
 
 const STORAGE_KEYS = {
-  contacts: 'ghost_contacts_v2',
-  tasks: 'ghost_tasks_v2',
-  receipts: 'ghost_receipts_v2',
-  skills: 'ghost_skills_v2',
+  contacts: 'ghost_contacts_v3',
+  tasks: 'ghost_tasks_v3',
+  history: 'ghost_history_v3',
 };
 
 function loadStored<T>(key: string, fallback: T): T {
@@ -58,23 +55,20 @@ function loadStored<T>(key: string, fallback: T): T {
 export function App() {
   const nativeMode = isRunningInNativeApk();
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('command');
+  const [activeTab, setActiveTab] = useState<ActiveTab>('new');
   const [phoneFrameMode, setPhoneFrameMode] = useState<boolean>(
     () =>
       typeof window !== 'undefined' && window.innerWidth >= 640 && !nativeMode
   );
 
-  const [contacts, setContacts] = useState<ContactProfile[]>(() =>
+  const [contacts, setContacts] = useState<SavedContact[]>(() =>
     loadStored(STORAGE_KEYS.contacts, INITIAL_CONTACTS)
   );
-  const [tasks, setTasks] = useState<GhostTask[]>(() =>
+  const [tasks, setTasks] = useState<ScheduledWhatsAppTask[]>(() =>
     loadStored(STORAGE_KEYS.tasks, INITIAL_TASKS)
   );
-  const [receipts, setReceipts] = useState<ExecutionReceipt[]>(() =>
-    loadStored(STORAGE_KEYS.receipts, INITIAL_RECEIPTS)
-  );
-  const [skills, setSkills] = useState<RecordedSkill[]>(() =>
-    loadStored(STORAGE_KEYS.skills, INITIAL_SKILLS)
+  const [history, setHistory] = useState<SentHistoryItem[]>(() =>
+    loadStored(STORAGE_KEYS.history, INITIAL_HISTORY)
   );
 
   const [deviceStatus, setDeviceStatus] = useState<AndroidDeviceStatus>(() =>
@@ -83,10 +77,8 @@ export function App() {
   const [apkMeta, setApkMeta] = useState<ApkMetadata | null>(null);
   const [showApkModal, setShowApkModal] = useState(false);
 
-  const [liveStage, setLiveStage] = useState<{
-    task: GhostTask;
-    contact: ContactProfile;
-  } | null>(null);
+  const [previewTask, setPreviewTask] =
+    useState<ScheduledWhatsAppTask | null>(null);
   const [hardwareKillSignal, setHardwareKillSignal] = useState(0);
   const [statusClock, setStatusClock] = useState('05:00');
 
@@ -118,19 +110,27 @@ export function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEYS.receipts, JSON.stringify(receipts));
+      localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history));
     } catch {}
-  }, [receipts]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEYS.skills, JSON.stringify(skills));
-    } catch {}
-  }, [skills]);
+  }, [history]);
 
   useEffect(() => {
     setDeviceStatus(getAndroidDeviceStatus());
-    if (!nativeMode) {
+    if (nativeMode) {
+      const devContacts = loadNativeContactsList();
+      if (devContacts.length > 0) {
+        setContacts((prev) => {
+          const existingPhones = new Set(prev.map((p) => p.phone));
+          const merged = [...prev];
+          for (const dc of devContacts) {
+            if (!existingPhones.has(dc.phone)) {
+              merged.push(dc);
+            }
+          }
+          return merged;
+        });
+      }
+    } else {
       fetch('/api/apk-meta')
         .then((r) => r.json())
         .then((d: ApkMetadata) => {
@@ -140,7 +140,14 @@ export function App() {
     }
   }, [nativeMode]);
 
-  const handleArmTask = (task: GhostTask) => {
+  const handleAddContact = (c: SavedContact) => {
+    setContacts((prev) => {
+      const withoutDup = prev.filter((item) => item.phone !== c.phone);
+      return [c, ...withoutDup];
+    });
+  };
+
+  const handleScheduleTask = (task: ScheduledWhatsAppTask) => {
     scheduleNativeAlarmTask(task);
     setTasks((prev) => [task, ...prev]);
   };
@@ -165,11 +172,18 @@ export function App() {
     setTasks((prev) => prev.filter((t) => t.id !== id));
   };
 
-  const activeArmedCount = tasks.filter((t) => t.enabled).length;
+  const handleRunOrPreview = (task: ScheduledWhatsAppTask) => {
+    if (nativeMode) {
+      executeNativeTaskNow(task);
+    } else {
+      setPreviewTask(task);
+    }
+  };
+
+  const activeCount = tasks.filter((t) => t.enabled).length;
 
   const androidAppContent = (
     <div className="flex flex-col h-full bg-ghost-canvas text-ghost-ink">
-      {/* Minimal Status Bar */}
       {!nativeMode && phoneFrameMode && (
         <div className="px-6 pt-3 pb-1 flex items-center justify-between text-[11px] font-mono font-medium text-ghost-secondary shrink-0">
           <span>{statusClock}</span>
@@ -181,7 +195,7 @@ export function App() {
         </div>
       )}
 
-      {/* Minimal App Header */}
+      {/* Minimal Header */}
       <header className="px-5 py-3.5 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-ghost-red neon-pulse" />
@@ -192,55 +206,45 @@ export function App() {
 
         <button
           type="button"
-          onClick={() => setActiveTab('queue')}
+          onClick={() => setActiveTab('scheduled')}
           className="px-3 py-1 rounded-full bg-ghost-surface border border-ghost-border text-xs font-semibold text-ghost-secondary hover:text-ghost-ink transition"
         >
-          {activeArmedCount} active
+          {activeCount} scheduled
         </button>
       </header>
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto px-4 pt-1">
-        {activeTab === 'command' && (
+        {activeTab === 'new' && (
           <CommandDeck
             contacts={contacts}
-            deviceStatus={deviceStatus}
-            onAddContact={(c) => setContacts((prev) => [c, ...prev])}
-            onArmTask={handleArmTask}
-            onDryRunTask={(task, contact) => setLiveStage({ task, contact })}
+            onAddContact={handleAddContact}
+            onScheduleTask={handleScheduleTask}
+            onPreviewOrSendNow={handleRunOrPreview}
           />
         )}
 
-        {activeTab === 'queue' && (
+        {activeTab === 'scheduled' && (
           <QueueView
             tasks={tasks}
-            contacts={contacts}
+            history={history}
             onToggleTask={handleToggleTask}
             onDeleteTask={handleDeleteTask}
-            onSimulateTask={(task, contact) => setLiveStage({ task, contact })}
+            onRunTask={handleRunOrPreview}
           />
         )}
 
-        {activeTab === 'shield' && (
-          <ShieldSkillsView
-            deviceStatus={deviceStatus}
-            skills={skills}
-            onAddSkill={(sk) => setSkills((prev) => [sk, ...prev])}
-          />
-        )}
-
-        {activeTab === 'receipts' && <ReceiptsView receipts={receipts} />}
+        {activeTab === 'setup' && <SetupView deviceStatus={deviceStatus} />}
       </main>
 
-      {/* Clean Minimal Bottom Nav */}
+      {/* Clean 3-Tab Bottom Bar */}
       <nav className="bg-ghost-surface/90 backdrop-blur border-t border-ghost-border px-3 pt-2 pb-2.5 shrink-0">
-        <div className="grid grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-3 gap-2">
           {(
             [
-              { id: 'command', label: 'New', icon: Sparkles },
-              { id: 'queue', label: 'Tasks', icon: Clock },
-              { id: 'shield', label: 'Safety', icon: Shield },
-              { id: 'receipts', label: 'Log', icon: History },
+              { id: 'new', label: 'New', icon: PlusCircle },
+              { id: 'scheduled', label: 'Scheduled', icon: Clock },
+              { id: 'setup', label: 'Setup', icon: Settings },
             ] as const
           ).map((tab) => {
             const Icon = tab.icon;
@@ -276,15 +280,6 @@ export function App() {
     return (
       <div className="h-screen w-screen overflow-hidden bg-ghost-canvas">
         {androidAppContent}
-        {liveStage && (
-          <LiveScreenStage
-            task={liveStage.task}
-            contact={liveStage.contact}
-            onClose={() => setLiveStage(null)}
-            onReceiptGenerated={(r) => setReceipts((prev) => [r, ...prev])}
-            externalKillSignal={hardwareKillSignal}
-          />
-        )}
       </div>
     );
   }
@@ -296,7 +291,7 @@ export function App() {
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-ghost-red" />
           <span className="text-xs font-bold tracking-tight text-ghost-ink">
-            Ghost v1.1
+            Ghost v1.2
           </span>
         </div>
 
@@ -337,7 +332,6 @@ export function App() {
               </div>
             </div>
 
-            {/* Subtle Fluorescent Red Vol-Down Kill-Switch Side Key */}
             <div className="hidden sm:flex flex-col gap-2.5 mt-28 -ml-[1px]">
               <div className="w-1 h-9 bg-[#BFC6D2] rounded-r" />
               <div className="w-1 h-11 bg-[#BFC6D2] rounded-r mt-2" />
@@ -356,12 +350,11 @@ export function App() {
         </div>
       )}
 
-      {liveStage && (
+      {previewTask && (
         <LiveScreenStage
-          task={liveStage.task}
-          contact={liveStage.contact}
-          onClose={() => setLiveStage(null)}
-          onReceiptGenerated={(r) => setReceipts((prev) => [r, ...prev])}
+          task={previewTask}
+          onClose={() => setPreviewTask(null)}
+          onHistoryAdded={(item) => setHistory((prev) => [item, ...prev])}
           externalKillSignal={hardwareKillSignal}
         />
       )}

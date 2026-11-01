@@ -4,8 +4,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-VERSION_NAME="1.1.0"
-VERSION_CODE="2"
+bash "$ROOT_DIR/scripts/setup-toolchain.sh"
+
+VERSION_NAME="1.2.0"
+VERSION_CODE="3"
 APK_FILENAME="Ghost-v${VERSION_NAME}.apk"
 
 TOOLCHAIN_DIR="${ANDROID_TOOLCHAIN_DIR:-/tmp/android-toolchain}"
@@ -88,10 +90,10 @@ if [ ! -f "$KEYSTORE" ]; then
     -keyalg RSA \
     -keysize 2048 \
     -validity 10000 \
-    -dname "CN=Ghost Agent APK, OU=Mobile Automation, O=Ghost AI, L=Mumbai, ST=MH, C=IN"
+    -dname "CN=Ghost WhatsApp Scheduler, OU=Mobile, O=Ghost, L=Mumbai, ST=MH, C=IN"
 fi
 
-rm -f "$ROOT_DIR/releases/Ghost-v1.0.0.apk"
+rm -f "$ROOT_DIR/releases/Ghost-v1.0.0.apk" "$ROOT_DIR/releases/Ghost-v1.1.0.apk"
 OUT_APK="$ROOT_DIR/releases/${APK_FILENAME}"
 "$JAVA_BIN" -jar "$APKSIGNER_JAR" sign \
   --ks "$KEYSTORE" \
@@ -132,25 +134,6 @@ meta = {
     "signatureSchemes": [
         "APK Signature Scheme v2 (Verified)",
         "APK Signature Scheme v3 (Verified)"
-    ],
-    "nativeClasses": [
-        "ai.ghost.agent.MainActivity",
-        "ai.ghost.agent.GhostAccessibilityService",
-        "ai.ghost.agent.GhostNativeBridge",
-        "ai.ghost.agent.GhostTaskScheduler",
-        "ai.ghost.agent.GhostTaskStore",
-        "ai.ghost.agent.GhostAlarmReceiver",
-        "ai.ghost.agent.GhostBootReceiver",
-        "ai.ghost.agent.GhostKillSwitchReceiver",
-        "ai.ghost.agent.GhostForegroundService"
-    ],
-    "permissions": [
-        "android.permission.BIND_ACCESSIBILITY_SERVICE",
-        "android.permission.SCHEDULE_EXACT_ALARM",
-        "android.permission.RECEIVE_BOOT_COMPLETED",
-        "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
-        "android.permission.SYSTEM_ALERT_WINDOW",
-        "android.permission.READ_CONTACTS"
     ]
 }
 with open("releases/apk-metadata.json", "w") as out:

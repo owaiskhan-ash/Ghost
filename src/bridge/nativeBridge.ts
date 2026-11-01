@@ -1,4 +1,9 @@
-import type { AndroidDeviceStatus, GhostTask } from '../types/ghost';
+import type {
+  AndroidDeviceStatus,
+  SavedContact,
+  ScheduledWhatsAppTask,
+} from '../types/ghost';
+import { makeInitials } from '../data/seedData';
 
 interface NativeAndroidInterface {
   getDeviceStatusJson?: () => string;
@@ -8,15 +13,14 @@ interface NativeAndroidInterface {
   emergencyStop?: () => void;
   openAccessibilitySettings?: () => void;
   openExactAlarmSettings?: () => void;
-  openOverlaySettings?: () => void;
+  pickPhoneContact?: () => void;
   getDeviceContactsJson?: () => string;
-  startSkillRecording?: (skillName: string) => void;
-  stopSkillRecording?: () => string;
 }
 
 declare global {
   interface Window {
     GhostNativeBridge?: NativeAndroidInterface;
+    onGhostContactPicked?: (contact: { name: string; phone: string }) => void;
   }
 }
 
@@ -30,32 +34,28 @@ export function getAndroidDeviceStatus(): AndroidDeviceStatus {
       const raw = JSON.parse(window.GhostNativeBridge.getDeviceStatusJson());
       return {
         isNativeApk: true,
-        deviceModel: raw.deviceModel || 'Android Device',
-        androidVersion: raw.androidVersion || 'Android 14 (API 34)',
+        deviceModel: raw.deviceModel || 'Android Phone',
+        androidVersion: raw.androidVersion || 'Android',
         accessibilityEnabled: Boolean(raw.accessibilityEnabled),
         exactAlarmAllowed: Boolean(raw.exactAlarmAllowed),
-        overlayAllowed: Boolean(raw.overlayAllowed),
-        devicePinLocked: Boolean(raw.devicePinLocked),
         whatsappInstalled: Boolean(raw.whatsappInstalled),
       };
     } catch {
-      // Fallback if JSON parse fails
+      // Fallback below
     }
   }
 
   return {
     isNativeApk: false,
-    deviceModel: 'Pixel 8 Pro · Viewport Simulator',
-    androidVersion: 'Android 14 · API 34',
+    deviceModel: 'Android Preview',
+    androidVersion: 'Android 14',
     accessibilityEnabled: true,
     exactAlarmAllowed: true,
-    overlayAllowed: true,
-    devicePinLocked: true,
     whatsappInstalled: true,
   };
 }
 
-export function scheduleNativeAlarmTask(task: GhostTask): boolean {
+export function scheduleNativeAlarmTask(task: ScheduledWhatsAppTask): boolean {
   if (window.GhostNativeBridge?.scheduleTask) {
     try {
       window.GhostNativeBridge.scheduleTask(JSON.stringify(task));
@@ -71,7 +71,7 @@ export function cancelNativeAlarmTask(taskId: string): void {
   window.GhostNativeBridge?.cancelTask?.(taskId);
 }
 
-export function executeNativeTaskNow(task: GhostTask): boolean {
+export function executeNativeTaskNow(task: ScheduledWhatsAppTask): boolean {
   if (window.GhostNativeBridge?.executeTaskNow) {
     try {
       window.GhostNativeBridge.executeTaskNow(JSON.stringify(task));
@@ -87,11 +87,12 @@ export function triggerNativeEmergencyStop(): void {
   window.GhostNativeBridge?.emergencyStop?.();
 }
 
-export function openNativeSettings(
-  target: 'accessibility' | 'alarm' | 'overlay'
-): boolean {
+export function openNativeSettings(target: 'accessibility' | 'alarm'): boolean {
   if (!window.GhostNativeBridge) return false;
-  if (target === 'accessibility' && window.GhostNativeBridge.openAccessibilitySettings) {
+  if (
+    target === 'accessibility' &&
+    window.GhostNativeBridge.openAccessibilitySettings
+  ) {
     window.GhostNativeBridge.openAccessibilitySettings();
     return true;
   }
@@ -99,9 +100,42 @@ export function openNativeSettings(
     window.GhostNativeBridge.openExactAlarmSettings();
     return true;
   }
-  if (target === 'overlay' && window.GhostNativeBridge.openOverlaySettings) {
-    window.GhostNativeBridge.openOverlaySettings();
-    return true;
-  }
   return false;
+}
+
+export function launchNativeContactPicker(
+  onPicked: (c: SavedContact) => void
+): boolean {
+  if (!window.GhostNativeBridge?.pickPhoneContact) return false;
+  window.onGhostContactPicked = (data) => {
+    if (data && data.phone) {
+      const cleanPhone = data.phone.replace(/[^\d+]/g, '');
+      const cleanName = (data.name || cleanPhone).trim();
+      onPicked({
+        id: `c-picked-${Date.now()}`,
+        name: cleanName,
+        phone: cleanPhone,
+        initials: makeInitials(cleanName),
+      });
+    }
+  };
+  window.GhostNativeBridge.pickPhoneContact();
+  return true;
+}
+
+export function loadNativeContactsList(): SavedContact[] {
+  if (!window.GhostNativeBridge?.getDeviceContactsJson) return [];
+  try {
+    const raw = JSON.parse(
+      window.GhostNativeBridge.getDeviceContactsJson()
+    ) as Array<{ name: string; phone: string }>;
+    return raw.map((item, idx) => ({
+      id: `c-dev-${idx}-${item.phone}`,
+      name: item.name,
+      phone: item.phone.replace(/[^\d+]/g, ''),
+      initials: makeInitials(item.name),
+    }));
+  } catch {
+    return [];
+  }
 }
