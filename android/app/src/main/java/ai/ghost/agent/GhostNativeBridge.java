@@ -39,13 +39,19 @@ public class GhostNativeBridge {
             obj.put("exactAlarmAllowed", alarmOk);
 
             PackageManager pm = activity.getPackageManager();
-            boolean wa = GhostTaskScheduler.isPackageInstalled(pm, "com.whatsapp")
-                    || GhostTaskScheduler.isPackageInstalled(pm, "com.whatsapp.w4b");
-            obj.put("whatsappInstalled", wa);
+            boolean waMain = GhostTaskScheduler.isPackageInstalled(pm, "com.whatsapp");
+            boolean waBiz = GhostTaskScheduler.isPackageInstalled(pm, "com.whatsapp.w4b");
+            obj.put("whatsappInstalled", waMain);
+            obj.put("whatsappBusinessInstalled", waBiz);
             return obj.toString();
         } catch (Exception e) {
             return "{}";
         }
+    }
+
+    @JavascriptInterface
+    public void setDarkMode(boolean dark) {
+        activity.setDarkModeFromJs(dark);
     }
 
     private boolean isAccessibilityServiceEnabled() {

@@ -7,6 +7,7 @@ import { makeInitials } from '../data/seedData';
 
 interface NativeAndroidInterface {
   getDeviceStatusJson?: () => string;
+  setDarkMode?: (dark: boolean) => void;
   scheduleTask?: (taskJson: string) => string;
   cancelTask?: (taskId: string) => void;
   executeTaskNow?: (taskJson: string) => string;
@@ -28,6 +29,14 @@ export function isRunningInNativeApk(): boolean {
   return typeof window !== 'undefined' && Boolean(window.GhostNativeBridge);
 }
 
+export function syncNativeDarkMode(dark: boolean): void {
+  try {
+    window.GhostNativeBridge?.setDarkMode?.(dark);
+  } catch {
+    // Ignore outside native WebView
+  }
+}
+
 export function getAndroidDeviceStatus(): AndroidDeviceStatus {
   if (window.GhostNativeBridge?.getDeviceStatusJson) {
     try {
@@ -39,6 +48,7 @@ export function getAndroidDeviceStatus(): AndroidDeviceStatus {
         accessibilityEnabled: Boolean(raw.accessibilityEnabled),
         exactAlarmAllowed: Boolean(raw.exactAlarmAllowed),
         whatsappInstalled: Boolean(raw.whatsappInstalled),
+        whatsappBusinessInstalled: Boolean(raw.whatsappBusinessInstalled),
       };
     } catch {
       // Fallback below
@@ -52,6 +62,7 @@ export function getAndroidDeviceStatus(): AndroidDeviceStatus {
     accessibilityEnabled: true,
     exactAlarmAllowed: true,
     whatsappInstalled: true,
+    whatsappBusinessInstalled: true,
   };
 }
 

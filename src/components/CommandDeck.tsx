@@ -65,14 +65,12 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
 }) => {
   const nativeMode = isRunningInNativeApk();
 
-  // Sort contacts so Favourites always appear first
   const sortedContacts = useMemo(() => {
     const favs = contacts.filter((c) => c.isFavourite);
     const others = contacts.filter((c) => !c.isFavourite);
     return [...favs, ...others];
   }, [contacts]);
 
-  // Single vs Multi-Contact mode
   const [multiMode, setMultiMode] = useState(false);
   const [selectedContactId, setSelectedContactId] = useState<string>(
     sortedContacts[0]?.id || ''
@@ -81,7 +79,6 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
     sortedContacts.slice(0, 2).map((c) => c.id)
   );
 
-  // Message state: shared message + optional per-contact custom messages
   const [messageMode, setMessageMode] = useState<'same' | 'custom'>('custom');
   const [messageBody, setMessageBody] = useState('Good morning');
   const [customMessages, setCustomMessages] = useState<Record<string, string>>(
@@ -95,12 +92,10 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
     useState<TargetWhatsApp>('com.whatsapp');
   const [scheduledToast, setScheduledToast] = useState(false);
 
-  // Add new contact inline
   const [showAddContact, setShowAddContact] = useState(false);
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('+91');
 
-  // Long-press contact options sheet state
   const [pressingContactId, setPressingContactId] = useState<string | null>(
     null
   );
@@ -203,7 +198,6 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
     setMultiMode((prev) => {
       const next = !prev;
       if (next) {
-        // Seed multi-selection with current active contact + next contact if <2 selected
         setSelectedMultiIds((curr) => {
           const valid = curr.filter((id) => contacts.some((c) => c.id === id));
           if (valid.length >= 2) return valid;
@@ -221,7 +215,6 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
     });
   };
 
-  // Derived 12-hour parts for crisp hour / minute / AM-PM controls
   const parsedTime = useMemo(() => {
     const [hStr, mStr] = time24.split(':');
     const h24 = Number(hStr) || 0;
@@ -389,17 +382,17 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
   const isMultiBatch = multiMode && activeMultiContacts.length > 1;
 
   return (
-    <div className="space-y-3.5 pb-4">
-      {/* 1. SELECT CONTACT(S) (Tap to select · Multi for multiple · Hold for options) */}
-      <section className="rounded-3xl bg-ghost-surface border border-ghost-border p-4 space-y-3">
+    <div className="space-y-3 pb-4">
+      {/* 1. CONTACTS — Boxy Card with Outlined & Solid Buttons */}
+      <section className="box-card p-3.5 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-xs font-semibold text-ghost-secondary">
-              {multiMode ? `Contacts (${activeMultiContacts.length})` : 'Contact'}
+            <span className="text-[11px] font-bold uppercase tracking-wider text-ghost-secondary">
+              {multiMode ? `Contacts [${activeMultiContacts.length}]` : 'Contact'}
             </span>
             {sortedContacts.length > 0 && (
-              <span className="text-[11px] text-ghost-muted truncate">
-                · Hold for options
+              <span className="text-[10px] font-mono text-ghost-muted truncate">
+                · HOLD FOR MENU
               </span>
             )}
           </div>
@@ -409,11 +402,11 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
               <button
                 type="button"
                 onClick={toggleMultiMode}
-                className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition ${
+                className={
                   multiMode
-                    ? 'bg-ghost-red text-white shadow-neonSm'
-                    : 'bg-ghost-recessed text-ghost-secondary hover:text-ghost-ink'
-                }`}
+                    ? 'btn-solid px-2.5 py-1 text-[10px]'
+                    : 'btn-outline px-2.5 py-1 text-[10px]'
+                }
               >
                 <Users className="w-3 h-3" />
                 Multi
@@ -424,17 +417,24 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
               <button
                 type="button"
                 onClick={handlePickNativeContact}
-                className="px-2.5 py-1 rounded-full bg-ghost-redSoft text-ghost-red text-xs font-semibold flex items-center gap-1"
+                className="btn-outline-red px-2.5 py-1 text-[10px]"
               >
-                <BookUser className="w-3.5 h-3.5" /> Phonebook
+                <BookUser className="w-3 h-3" />
+                Book
               </button>
             )}
+
             <button
               type="button"
               onClick={() => setShowAddContact((v) => !v)}
-              className="px-2 py-1 text-xs font-semibold text-ghost-red flex items-center gap-0.5"
+              className={
+                showAddContact
+                  ? 'btn-solid px-2.5 py-1 text-[10px]'
+                  : 'btn-outline-red px-2.5 py-1 text-[10px]'
+              }
             >
-              <Plus className="w-3.5 h-3.5" /> Add
+              <Plus className="w-3 h-3" />
+              Add
             </button>
           </div>
         </div>
@@ -442,33 +442,30 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
         {(showAddContact || sortedContacts.length === 0) && (
           <form
             onSubmit={handleSaveContact}
-            className="p-2.5 rounded-2xl bg-ghost-recessed flex flex-col sm:flex-row gap-2"
+            className="p-2.5 bg-ghost-recessed border-[1.5px] border-ghost-border rounded-[2px] flex flex-col sm:flex-row gap-2"
           >
             <input
               type="text"
               placeholder="Name (e.g. Jasmine)"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              className="flex-1 rounded-xl bg-white px-3 py-2 text-xs text-ghost-ink focus:outline-none"
+              className="box-input flex-1 px-2.5 py-2 text-xs"
             />
             <input
               type="tel"
               placeholder="+919820448210"
               value={newPhone}
               onChange={(e) => setNewPhone(e.target.value)}
-              className="flex-1 rounded-xl bg-white px-3 py-2 text-xs font-mono text-ghost-ink focus:outline-none"
+              className="box-input flex-1 px-2.5 py-2 text-xs font-mono"
             />
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-xl bg-ghost-red text-white text-xs font-bold shrink-0"
-            >
+            <button type="submit" className="btn-solid px-4 py-2 shrink-0">
               Save
             </button>
           </form>
         )}
 
         {sortedContacts.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {sortedContacts.map((c) => {
               const multiOrderIdx = activeMultiContacts.findIndex(
                 (mc) => mc.id === c.id
@@ -500,37 +497,37 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                     }
                     handleTapContact(c);
                   }}
-                  className={`no-touch-callout touch-manipulation px-3 py-2 rounded-2xl text-xs font-semibold transition flex items-center gap-2 border ${
-                    isPressing ? 'scale-[0.96] ring-2 ring-ghost-red/50' : ''
+                  className={`no-touch-callout touch-manipulation px-2.5 py-2 rounded-[2px] text-xs font-semibold transition flex items-center gap-2 border-[1.5px] text-left ${
+                    isPressing ? 'scale-[0.98] ring-2 ring-ghost-red' : ''
                   } ${
                     selected
                       ? 'bg-ghost-red text-white border-ghost-red shadow-neonSm'
-                      : 'bg-white text-ghost-ink border-ghost-border hover:border-ghost-borderStrong'
+                      : 'bg-ghost-elevated text-ghost-ink border-ghost-borderStrong hover:border-ghost-red'
                   }`}
                 >
                   <span
-                    className={`relative w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                    className={`w-6 h-6 rounded-[2px] font-mono text-[10px] font-bold flex items-center justify-center shrink-0 border ${
                       selected
-                        ? 'bg-white/20 text-white'
-                        : 'bg-ghost-recessed text-ghost-ink'
+                        ? 'bg-black/25 text-white border-white/30'
+                        : 'bg-ghost-recessed text-ghost-ink border-ghost-border'
                     }`}
                   >
                     {multiMode && selected ? multiOrderIdx + 1 : c.initials}
                   </span>
-                  <div className="text-left">
-                    <div className="leading-tight flex items-center gap-1">
-                      <span>{c.name}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="leading-tight flex items-center gap-1 truncate">
+                      <span className="truncate font-bold">{c.name}</span>
                       {c.isFavourite && (
                         <Star
-                          className={`w-3 h-3 fill-current ${
+                          className={`w-3 h-3 fill-current shrink-0 ${
                             selected ? 'text-white' : 'text-ghost-red'
                           }`}
                         />
                       )}
                     </div>
                     <div
-                      className={`text-[10px] font-mono leading-tight ${
-                        selected ? 'text-white/80' : 'text-ghost-muted'
+                      className={`text-[10px] font-mono leading-tight truncate mt-0.5 ${
+                        selected ? 'text-white/85' : 'text-ghost-muted'
                       }`}
                     >
                       {c.phone}
@@ -543,18 +540,18 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
         )}
       </section>
 
-      {/* 2. PICK ANY TIME & DATE */}
-      <section className="rounded-3xl bg-ghost-surface border border-ghost-border p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-ghost-secondary flex items-center gap-1.5">
+      {/* 2. TIME & SCHEDULE */}
+      <section className="box-card p-3.5 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-ghost-secondary flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5 text-ghost-red" /> Time
           </span>
 
           <div className="flex items-center gap-1">
             {(
               [
-                { id: '1m', label: '+1m' },
-                { id: '5m', label: '+5m' },
+                { id: '1m', label: '+1M' },
+                { id: '5m', label: '+5M' },
                 { id: '5am', label: '5 AM' },
                 { id: '9am', label: '9 AM' },
               ] as const
@@ -563,7 +560,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                 key={q.id}
                 type="button"
                 onClick={() => applyQuickTime(q.id)}
-                className="px-2 py-0.5 rounded-full bg-ghost-recessed hover:bg-ghost-redSoft hover:text-ghost-red text-[11px] font-medium text-ghost-secondary transition"
+                className="btn-outline px-2 py-0.5 text-[10px] font-mono"
               >
                 {q.label}
               </button>
@@ -571,7 +568,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
           </div>
         </div>
 
-        <div className="rounded-2xl bg-white border border-ghost-border p-3 flex items-center justify-between gap-2">
+        <div className="bg-ghost-elevated border-[1.5px] border-ghost-border rounded-[2px] p-2.5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
             <select
               aria-label="Hour"
@@ -583,7 +580,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                   parsedTime.period
                 )
               }
-              className="appearance-none bg-ghost-canvas rounded-xl px-3 py-2 font-mono text-xl font-bold text-ghost-ink text-center focus:outline-none focus:ring-2 focus:ring-ghost-red cursor-pointer"
+              className="appearance-none bg-ghost-canvas border-[1.5px] border-ghost-borderStrong focus:border-ghost-red rounded-[2px] px-3 py-1.5 font-mono text-xl font-bold text-ghost-ink text-center focus:outline-none cursor-pointer"
             >
               {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
                 <option key={h} value={h}>
@@ -592,7 +589,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
               ))}
             </select>
 
-            <span className="font-mono text-xl font-bold text-ghost-muted">
+            <span className="font-mono text-xl font-bold text-ghost-red">
               :
             </span>
 
@@ -606,7 +603,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                   parsedTime.period
                 )
               }
-              className="appearance-none bg-ghost-canvas rounded-xl px-3 py-2 font-mono text-xl font-bold text-ghost-ink text-center focus:outline-none focus:ring-2 focus:ring-ghost-red cursor-pointer"
+              className="appearance-none bg-ghost-canvas border-[1.5px] border-ghost-borderStrong focus:border-ghost-red rounded-[2px] px-3 py-1.5 font-mono text-xl font-bold text-ghost-ink text-center focus:outline-none cursor-pointer"
             >
               {Array.from({ length: 60 }, (_, m) => m).map((m) => (
                 <option key={m} value={m}>
@@ -616,7 +613,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             </select>
           </div>
 
-          <div className="flex bg-ghost-recessed p-1 rounded-xl">
+          <div className="flex items-center gap-1.5">
             {(['AM', 'PM'] as const).map((p) => (
               <button
                 key={p}
@@ -624,11 +621,11 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                 onClick={() =>
                   updateTimeParts(parsedTime.h12, parsedTime.min, p)
                 }
-                className={`px-3 py-1.5 rounded-lg font-mono text-xs font-bold transition ${
+                className={
                   parsedTime.period === p
-                    ? 'bg-ghost-red text-white shadow-neonSm'
-                    : 'text-ghost-secondary'
-                }`}
+                    ? 'btn-solid px-3 py-2 font-mono text-xs'
+                    : 'btn-outline px-3 py-2 font-mono text-xs'
+                }
               >
                 {p}
               </button>
@@ -637,14 +634,14 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-2xl bg-white border border-ghost-border px-3 py-2 flex items-center gap-2">
+          <div className="box-input px-2.5 py-2 flex items-center gap-2">
             <Calendar className="w-3.5 h-3.5 text-ghost-red shrink-0" />
             <input
               type="date"
               value={dateStr}
               onChange={(e) => setDateStr(e.target.value)}
               disabled={repeatMode === 'daily'}
-              className="w-full bg-transparent text-xs font-medium text-ghost-ink focus:outline-none disabled:opacity-50"
+              className="w-full bg-transparent text-xs font-mono font-medium text-ghost-ink focus:outline-none disabled:opacity-40"
             />
           </div>
 
@@ -653,78 +650,82 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             onClick={() =>
               setRepeatMode((m) => (m === 'once' ? 'daily' : 'once'))
             }
-            className={`rounded-2xl px-3 py-2 text-xs font-semibold border transition flex items-center justify-center gap-1.5 ${
+            className={
               repeatMode === 'daily'
-                ? 'bg-ghost-redSoft text-ghost-red border-ghost-red/40'
-                : 'bg-white text-ghost-secondary border-ghost-border'
-            }`}
+                ? 'btn-solid px-3 py-2'
+                : 'btn-outline px-3 py-2'
+            }
           >
-            <Repeat className="w-3.5 h-3.5 text-ghost-red" />
+            <Repeat className="w-3.5 h-3.5" />
             {repeatMode === 'daily' ? 'Every Day' : 'One Time'}
           </button>
         </div>
       </section>
 
-      {/* 3. MESSAGE (Single or Multi Same / Custom per person) */}
-      <section className="rounded-3xl bg-ghost-surface border border-ghost-border p-4 space-y-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-ghost-secondary">
-              Message
-            </span>
-
-            {isMultiBatch && (
-              <div className="flex bg-ghost-recessed p-0.5 rounded-full text-[11px]">
-                <button
-                  type="button"
-                  onClick={() => setMessageMode('custom')}
-                  className={`px-2 py-0.5 rounded-full font-semibold transition ${
-                    messageMode === 'custom'
-                      ? 'bg-ghost-red text-white'
-                      : 'text-ghost-secondary'
-                  }`}
-                >
-                  Per Person
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMessageMode('same')}
-                  className={`px-2 py-0.5 rounded-full font-semibold transition ${
-                    messageMode === 'same'
-                      ? 'bg-ghost-red text-white'
-                      : 'text-ghost-secondary'
-                  }`}
-                >
-                  Same
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="flex bg-ghost-recessed p-0.5 rounded-full text-[11px]">
+      {/* 3. APP TARGET (WhatsApp vs WA Business) & MESSAGE */}
+      <section className="box-card p-3.5 space-y-3">
+        {/* Strict App Selector: WhatsApp (com.whatsapp) vs WA Business (com.whatsapp.w4b) */}
+        <div className="space-y-1.5">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-ghost-secondary block">
+            Open App
+          </span>
+          <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => setWhatsappPackage('com.whatsapp')}
-              className={`px-2.5 py-0.5 rounded-full font-medium transition ${
+              className={
                 whatsappPackage === 'com.whatsapp'
-                  ? 'bg-white text-ghost-ink shadow-sm'
-                  : 'text-ghost-secondary'
-              }`}
+                  ? 'btn-solid py-2'
+                  : 'btn-outline py-2'
+              }
             >
               WhatsApp
             </button>
             <button
               type="button"
               onClick={() => setWhatsappPackage('com.whatsapp.w4b')}
-              className={`px-2.5 py-0.5 rounded-full font-medium transition ${
+              className={
                 whatsappPackage === 'com.whatsapp.w4b'
-                  ? 'bg-white text-ghost-ink shadow-sm'
-                  : 'text-ghost-secondary'
-              }`}
+                  ? 'btn-solid py-2'
+                  : 'btn-outline py-2'
+              }
             >
               WA Business
             </button>
           </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 pt-0.5">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-ghost-secondary">
+            Message
+          </span>
+
+          {isMultiBatch && (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setMessageMode('custom')}
+                className={
+                  messageMode === 'custom'
+                    ? 'btn-solid px-2.5 py-1 text-[10px]'
+                    : 'btn-outline px-2.5 py-1 text-[10px]'
+                }
+              >
+                Per Person
+              </button>
+              <button
+                type="button"
+                onClick={() => setMessageMode('same')}
+                className={
+                  messageMode === 'same'
+                    ? 'btn-solid px-2.5 py-1 text-[10px]'
+                    : 'btn-outline px-2.5 py-1 text-[10px]'
+                }
+              >
+                Same
+              </button>
+            </div>
+          )}
         </div>
 
         {isMultiBatch && messageMode === 'custom' ? (
@@ -732,9 +733,9 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             {activeMultiContacts.map((c, idx) => (
               <div
                 key={c.id}
-                className="rounded-2xl bg-white border border-ghost-border focus-within:border-ghost-red px-3 py-2 flex items-center gap-2.5"
+                className="box-input px-2.5 py-2 flex items-center gap-2"
               >
-                <span className="px-2 py-0.5 rounded-full bg-ghost-redSoft text-ghost-red text-[11px] font-bold shrink-0">
+                <span className="px-2 py-0.5 bg-ghost-red text-white rounded-[2px] font-mono text-[10px] font-bold shrink-0">
                   {idx + 1}. {c.name}
                 </span>
                 <input
@@ -762,24 +763,25 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                 ? `Write message for all ${activeMultiContacts.length} contacts…`
                 : 'Write your WhatsApp message…'
             }
-            className="w-full rounded-2xl bg-white border border-ghost-border focus:border-ghost-red focus:outline-none px-3.5 py-2.5 text-sm font-medium text-ghost-ink placeholder:text-ghost-muted resize-none"
+            className="box-input w-full px-3 py-2.5 text-sm font-medium placeholder:text-ghost-muted resize-none"
           />
         )}
 
-        <div className="grid grid-cols-5 gap-2.5 pt-1">
+        {/* Primary Action Row: Crisp Outlined Button + Crisp Solid Button */}
+        <div className="grid grid-cols-5 gap-2 pt-1">
           <button
             type="button"
             onClick={handlePreview}
-            className="col-span-2 py-3 rounded-2xl bg-ghost-recessed hover:bg-ghost-border text-ghost-ink font-semibold text-xs transition flex items-center justify-center gap-1.5"
+            className="col-span-2 btn-outline-red py-3"
           >
-            <Play className="w-3.5 h-3.5 text-ghost-red fill-current" />
+            <Play className="w-3.5 h-3.5 fill-current" />
             {nativeMode ? 'Send Now' : 'Test'}
           </button>
 
           <button
             type="button"
             onClick={handleSchedule}
-            className="col-span-3 py-3 rounded-2xl bg-ghost-red hover:bg-ghost-redHover text-white font-bold text-xs shadow-neon transition flex items-center justify-center gap-1.5"
+            className="col-span-3 btn-solid py-3 shadow-neon"
           >
             {scheduledToast ? (
               <>
@@ -790,7 +792,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
               <>
                 <Send className="w-3.5 h-3.5" />
                 {isMultiBatch
-                  ? `Schedule (${activeMultiContacts.length}) · ${formatTime12h(
+                  ? `Schedule [${activeMultiContacts.length}] · ${formatTime12h(
                       time24
                     )}`
                   : `Schedule · ${formatTime12h(time24)}`}
@@ -800,20 +802,19 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
         </div>
       </section>
 
-      {/* LONG-TAP CONTACT ACTION SHEET (Favourite / Edit / Delete) */}
+      {/* LONG-TAP CONTACT ACTION MODAL (Boxy Outlined + Solid Buttons) */}
       {menuContact && (
         <div
           onClick={closeContactMenu}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ghost-ink/40 backdrop-blur-sm p-3"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/65 backdrop-blur-[2px] p-3"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-xs rounded-3xl bg-ghost-surface border border-ghost-border shadow-2xl p-4 space-y-3"
+            className="w-full max-w-xs box-card shadow-2xl p-4 space-y-3"
           >
-            {/* Contact Header */}
-            <div className="flex items-center justify-between pb-2 border-b border-ghost-border">
+            <div className="flex items-center justify-between pb-2.5 border-b-[1.5px] border-ghost-border">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-9 h-9 rounded-full bg-ghost-red text-white text-xs font-bold flex items-center justify-center shrink-0">
+                <div className="w-9 h-9 rounded-[2px] bg-ghost-red text-white font-mono text-xs font-bold flex items-center justify-center shrink-0">
                   {menuContact.initials}
                 </div>
                 <div className="min-w-0">
@@ -832,7 +833,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
               <button
                 type="button"
                 onClick={closeContactMenu}
-                className="p-1.5 rounded-full bg-ghost-recessed text-ghost-ink hover:bg-ghost-border transition"
+                className="btn-outline p-1.5"
                 aria-label="Close options"
               >
                 <X className="w-4 h-4" />
@@ -840,14 +841,14 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             </div>
 
             {!editingInSheet ? (
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <button
                   type="button"
                   onClick={() => {
                     onToggleFavouriteContact(menuContact.id);
                     closeContactMenu();
                   }}
-                  className="w-full px-3.5 py-2.5 rounded-2xl bg-white hover:bg-ghost-recessed border border-ghost-border text-xs font-semibold text-ghost-ink flex items-center gap-2.5 transition"
+                  className="btn-outline w-full justify-start px-3 py-2.5"
                 >
                   <Star
                     className={`w-4 h-4 text-ghost-red ${
@@ -856,8 +857,8 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                   />
                   <span>
                     {menuContact.isFavourite
-                      ? 'Remove from Favourites'
-                      : 'Add to Favourites'}
+                      ? 'Remove Favourite'
+                      : 'Add Favourite'}
                   </span>
                 </button>
 
@@ -868,7 +869,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                     setEditPhone(menuContact.phone);
                     setEditingInSheet(true);
                   }}
-                  className="w-full px-3.5 py-2.5 rounded-2xl bg-white hover:bg-ghost-recessed border border-ghost-border text-xs font-semibold text-ghost-ink flex items-center gap-2.5 transition"
+                  className="btn-outline w-full justify-start px-3 py-2.5"
                 >
                   <Pencil className="w-4 h-4 text-ghost-red" />
                   <span>Edit Contact</span>
@@ -883,7 +884,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                     );
                     closeContactMenu();
                   }}
-                  className="w-full px-3.5 py-2.5 rounded-2xl bg-ghost-redSoft hover:bg-ghost-red text-ghost-red hover:text-white text-xs font-semibold flex items-center gap-2.5 transition"
+                  className="btn-solid w-full justify-start px-3 py-2.5"
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>Delete Contact</span>
@@ -898,14 +899,14 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
                     autoFocus
-                    className="w-full rounded-xl bg-white border border-ghost-border focus:border-ghost-red px-3 py-2 text-xs font-medium text-ghost-ink focus:outline-none"
+                    className="box-input w-full px-3 py-2 text-xs font-medium"
                   />
                   <input
                     type="tel"
                     placeholder="+919820448210"
                     value={editPhone}
                     onChange={(e) => setEditPhone(e.target.value)}
-                    className="w-full rounded-xl bg-white border border-ghost-border focus:border-ghost-red px-3 py-2 text-xs font-mono text-ghost-ink focus:outline-none"
+                    className="box-input w-full px-3 py-2 text-xs font-mono"
                   />
                 </div>
 
@@ -913,15 +914,12 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                   <button
                     type="button"
                     onClick={() => setEditingInSheet(false)}
-                    className="py-2.5 rounded-xl bg-ghost-recessed text-xs font-semibold text-ghost-secondary hover:text-ghost-ink transition"
+                    className="btn-outline py-2.5"
                   >
                     Back
                   </button>
-                  <button
-                    type="submit"
-                    className="py-2.5 rounded-xl bg-ghost-red hover:bg-ghost-redHover text-white text-xs font-bold shadow-neonSm transition"
-                  >
-                    Save Changes
+                  <button type="submit" className="btn-solid py-2.5">
+                    Save
                   </button>
                 </div>
               </form>

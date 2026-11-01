@@ -11,14 +11,57 @@
 @tailwind utilities;
 
 :root {
-  --bg-canvas: #ECEEF1;
-  --bg-surface: #F7F8FA;
-  --bg-elevated: #FFFFFF;
-  --bg-recessed: #E1E4EA;
-  --border-subtle: #D8DCE3;
-  --ink-primary: #121418;
-  --ink-secondary: #5A6170;
-  --neon-red: #FF1E38;
+  /* Light Mode: Crisp Light Grey + Fluorescent Red */
+  --ghost-canvas: 235 238 242;
+  --ghost-surface: 246 247 249;
+  --ghost-elevated: 255 255 255;
+  --ghost-recessed: 223 227 234;
+  --ghost-border: 196 203 214;
+  --ghost-border-strong: 146 156 172;
+  --ghost-ink: 17 19 24;
+  --ghost-secondary: 74 82 98;
+  --ghost-muted: 118 127 145;
+  --ghost-red: 255 30 56;
+  --ghost-red-hover: 230 16 42;
+  --ghost-red-soft: 255 226 231;
+}
+
+html.dark {
+  /* Dark Mode: Pitch Black + Fluorescent Red */
+  --ghost-canvas: 8 8 10;
+  --ghost-surface: 15 15 19;
+  --ghost-elevated: 22 22 28;
+  --ghost-recessed: 28 28 36;
+  --ghost-border: 42 42 52;
+  --ghost-border-strong: 74 74 90;
+  --ghost-ink: 246 247 249;
+  --ghost-secondary: 170 176 190;
+  --ghost-muted: 112 118 134;
+  --ghost-red: 255 30 56;
+  --ghost-red-hover: 255 56 79;
+  --ghost-red-soft: 54 12 20;
+}
+
+@layer components {
+  .box-card {
+    @apply bg-ghost-surface border-[1.5px] border-ghost-border rounded-[2px];
+  }
+
+  .box-input {
+    @apply bg-ghost-elevated border-[1.5px] border-ghost-border focus:border-ghost-red rounded-[2px] text-ghost-ink focus:outline-none transition-colors;
+  }
+
+  .btn-solid {
+    @apply bg-ghost-red hover:bg-ghost-redHover text-white border-[1.5px] border-ghost-red rounded-[2px] font-bold tracking-wide uppercase text-xs transition active:translate-y-[1px] inline-flex items-center justify-center gap-1.5;
+  }
+
+  .btn-outline {
+    @apply bg-transparent hover:bg-ghost-elevated text-ghost-ink border-[1.5px] border-ghost-borderStrong hover:border-ghost-red rounded-[2px] font-semibold tracking-wide uppercase text-xs transition active:translate-y-[1px] inline-flex items-center justify-center gap-1.5;
+  }
+
+  .btn-outline-red {
+    @apply bg-transparent hover:bg-ghost-red hover:text-white text-ghost-red border-[1.5px] border-ghost-red rounded-[2px] font-bold tracking-wide uppercase text-xs transition active:translate-y-[1px] inline-flex items-center justify-center gap-1.5;
+  }
 }
 
 * {
@@ -34,45 +77,29 @@
 
 body {
   font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
-  background-color: #ECEEF1;
-  color: #121418;
+  background-color: rgb(var(--ghost-canvas));
+  color: rgb(var(--ghost-ink));
   margin: 0;
   padding: 0;
   overflow-x: hidden;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+html.dark input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(1);
 }
 
 @keyframes neonPulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(255, 30, 56, 0.45);
+    box-shadow: 0 0 0 0 rgba(255, 30, 56, 0.5);
   }
   70% {
-    box-shadow: 0 0 0 7px rgba(255, 30, 56, 0);
+    box-shadow: 0 0 0 6px rgba(255, 30, 56, 0);
   }
 }
 
 .neon-pulse {
   animation: neonPulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
-}
-
-input[type='range'].ghost-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  background: #DFE3EA;
-  height: 5px;
-  border-radius: 999px;
-  outline: none;
-}
-
-input[type='range'].ghost-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  background: #FF1E38;
-  border: 2px solid #FFFFFF;
-  box-shadow: 0 2px 6px rgba(255, 30, 56, 0.4);
-  cursor: pointer;
 }
 
 ::-webkit-scrollbar {
@@ -83,6 +110,6 @@ input[type='range'].ghost-slider::-webkit-slider-thumb {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #CBD1DC;
-  border-radius: 999px;
+  background: rgb(var(--ghost-border-strong));
+  border-radius: 0px;
 }

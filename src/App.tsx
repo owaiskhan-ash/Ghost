@@ -1,16 +1,7 @@
 import { useEffect, useState } from 'react';
-import {
-  Clock,
-  Download,
-  Maximize2,
-  PlusCircle,
-  Settings,
-  Smartphone,
-  Wifi,
-} from 'lucide-react';
+import { Clock, PlusSquare, Settings, Wifi } from 'lucide-react';
 import type {
   AndroidDeviceStatus,
-  ApkMetadata,
   SavedContact,
   ScheduledWhatsAppTask,
   SentHistoryItem,
@@ -28,19 +19,20 @@ import {
   isRunningInNativeApk,
   loadNativeContactsList,
   scheduleNativeAlarmTask,
+  syncNativeDarkMode,
 } from './bridge/nativeBridge';
 import { CommandDeck } from './components/CommandDeck';
 import { QueueView } from './components/QueueView';
 import { SetupView } from './components/SetupView';
 import { LiveScreenStage } from './components/LiveScreenStage';
-import { ApkStudioModal } from './components/ApkStudioModal';
 
-type ActiveTab = 'new' | 'scheduled' | 'setup';
+type ActiveTab = 'new' | 'scheduled' | 'settings';
 
 const STORAGE_KEYS = {
   contacts: 'ghost_contacts_v4',
   tasks: 'ghost_tasks_v4',
   history: 'ghost_history_v4',
+  darkMode: 'ghost_dark_mode_v1',
 };
 
 function loadStored<T>(key: string, fallback: T): T {
@@ -57,9 +49,8 @@ export function App() {
   const nativeMode = isRunningInNativeApk();
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('new');
-  const [phoneFrameMode, setPhoneFrameMode] = useState<boolean>(
-    () =>
-      typeof window !== 'undefined' && window.innerWidth >= 640 && !nativeMode
+  const [darkMode, setDarkMode] = useState<boolean>(() =>
+    loadStored(STORAGE_KEYS.darkMode, false)
   );
 
   const [contacts, setContacts] = useState<SavedContact[]>(() =>
@@ -75,13 +66,19 @@ export function App() {
   const [deviceStatus, setDeviceStatus] = useState<AndroidDeviceStatus>(() =>
     getAndroidDeviceStatus()
   );
-  const [apkMeta, setApkMeta] = useState<ApkMetadata | null>(null);
-  const [showApkModal, setShowApkModal] = useState(false);
 
   const [previewTask, setPreviewTask] =
     useState<ScheduledWhatsAppTask | null>(null);
   const [hardwareKillSignal, setHardwareKillSignal] = useState(0);
   const [statusClock, setStatusClock] = useState('05:00');
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode);
+    syncNativeDarkMode(darkMode);
+    try {
+      localStorage.setItem(STORAGE_KEYS.darkMode, JSON.stringify(darkMode));
+    } catch {}
+  }, [darkMode]);
 
   useEffect(() => {
     const updateClock = () => {
@@ -131,13 +128,6 @@ export function App() {
           return merged;
         });
       }
-    } else {
-      fetch('/api/apk-meta')
-        .then((r) => r.json())
-        .then((d: ApkMetadata) => {
-          if (d && d.available) setApkMeta(d);
-        })
-        .catch(() => {});
     }
   }, [nativeMode]);
 
@@ -159,11 +149,8 @@ export function App() {
   const handleEditContact = (id: string, name: string, phone: string) => {
     const initials = makeInitials(name);
     setContacts((prev) =>
-      prev.map((c) =>
-        c.id === id ? { ...c, name, phone, initials } : c
-      )
+      prev.map((c) => (c.id === id ? { ...c, name, phone, initials } : c))
     );
-    // Keep any single or multi-contact scheduled tasks synced with the updated name & phone
     setTasks((prev) =>
       prev.map((t) => {
         const matchesPrimary = t.contactId === id;
@@ -254,22 +241,21 @@ export function App() {
 
   const androidAppContent = (
     <div className="flex flex-col h-full bg-ghost-canvas text-ghost-ink">
-      {!nativeMode && phoneFrameMode && (
-        <div className="px-6 pt-3 pb-1 flex items-center justify-between text-[11px] font-mono font-medium text-ghost-secondary shrink-0">
+      {!nativeMode && (
+        <div className="hidden sm:flex px-4 py-2 border-b-[1.5px] border-ghost-border items-center justify-between text-[11px] font-mono font-medium text-ghost-secondary shrink-0">
           <span>{statusClock}</span>
-          <div className="w-14 h-3.5 rounded-full bg-ghost-ink/85" />
           <div className="flex items-center gap-1.5">
             <Wifi className="w-3 h-3" />
-            <div className="w-4 h-2 rounded-sm bg-ghost-red" />
+            <div className="w-4 h-2 bg-ghost-red" />
           </div>
         </div>
       )}
 
-      {/* Minimal Header */}
-      <header className="px-5 py-3.5 flex items-center justify-between shrink-0">
+      {/* Boxy Minimal Header (No Download APK Button) */}
+      <header className="px-4 py-3 border-b-[1.5px] border-ghost-border bg-ghost-surface flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-ghost-red neon-pulse" />
-          <span className="font-bold tracking-tight text-base text-ghost-ink">
+          <span className="w-2.5 h-2.5 bg-ghost-red neon-pulse" />
+          <span className="font-bold tracking-wider uppercase text-sm text-ghost-ink">
             Ghost
           </span>
         </div>
@@ -277,14 +263,14 @@ export function App() {
         <button
           type="button"
           onClick={() => setActiveTab('scheduled')}
-          className="px-3 py-1 rounded-full bg-ghost-surface border border-ghost-border text-xs font-semibold text-ghost-secondary hover:text-ghost-ink transition"
+          className="btn-outline px-2.5 py-1 text-[10px] font-mono"
         >
-          {activeCount} scheduled
+          {activeCount} Scheduled
         </button>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto px-4 pt-1">
+      <main className="flex-1 overflow-y-auto px-3.5 pt-3">
         {activeTab === 'new' && (
           <CommandDeck
             contacts={contacts}
@@ -307,17 +293,23 @@ export function App() {
           />
         )}
 
-        {activeTab === 'setup' && <SetupView deviceStatus={deviceStatus} />}
+        {activeTab === 'settings' && (
+          <SetupView
+            deviceStatus={deviceStatus}
+            darkMode={darkMode}
+            onToggleDarkMode={setDarkMode}
+          />
+        )}
       </main>
 
-      {/* Clean 3-Tab Bottom Bar */}
-      <nav className="bg-ghost-surface/90 backdrop-blur border-t border-ghost-border px-3 pt-2 pb-2.5 shrink-0">
+      {/* Boxy 3-Tab Bottom Navigation (Outlined + Solid Buttons) */}
+      <nav className="bg-ghost-surface border-t-[1.5px] border-ghost-border p-2.5 shrink-0">
         <div className="grid grid-cols-3 gap-2">
           {(
             [
-              { id: 'new', label: 'New', icon: PlusCircle },
+              { id: 'new', label: 'New', icon: PlusSquare },
               { id: 'scheduled', label: 'Scheduled', icon: Clock },
-              { id: 'setup', label: 'Setup', icon: Settings },
+              { id: 'settings', label: 'Settings', icon: Settings },
             ] as const
           ).map((tab) => {
             const Icon = tab.icon;
@@ -327,24 +319,18 @@ export function App() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`py-2 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition ${
+                className={`py-2 rounded-[2px] border-[1.5px] flex flex-col items-center justify-center gap-0.5 transition uppercase tracking-wider ${
                   isActive
-                    ? 'bg-ghost-red text-white shadow-neonSm'
-                    : 'text-ghost-secondary hover:text-ghost-ink'
+                    ? 'bg-ghost-red text-white border-ghost-red shadow-neonSm font-bold'
+                    : 'bg-transparent text-ghost-secondary border-ghost-borderStrong hover:border-ghost-red hover:text-ghost-ink font-semibold'
                 }`}
               >
                 <Icon className="w-4 h-4" />
-                <span className="text-[10px] font-semibold">{tab.label}</span>
+                <span className="text-[10px]">{tab.label}</span>
               </button>
             );
           })}
         </div>
-
-        {!nativeMode && phoneFrameMode && (
-          <div className="mt-2 flex justify-center">
-            <div className="w-24 h-1 rounded-full bg-ghost-borderStrong" />
-          </div>
-        )}
       </nav>
     </div>
   );
@@ -358,70 +344,24 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-ghost-canvas text-ghost-ink">
-      {/* Minimal Viewport Bar */}
-      <div className="px-5 py-2.5 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-ghost-red" />
-          <span className="text-xs font-bold tracking-tight text-ghost-ink">
-            Ghost v1.4
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setPhoneFrameMode((v) => !v)}
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-ghost-surface border border-ghost-border text-xs font-medium text-ghost-secondary hover:text-ghost-ink transition"
-          >
-            {phoneFrameMode ? (
-              <>
-                <Maximize2 className="w-3.5 h-3.5 text-ghost-red" /> Full
-              </>
-            ) : (
-              <>
-                <Smartphone className="w-3.5 h-3.5 text-ghost-red" /> Phone
-              </>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowApkModal(true)}
-            className="px-3.5 py-1.5 rounded-full bg-ghost-red hover:bg-ghost-redHover text-white text-xs font-bold shadow-neonSm transition flex items-center gap-1.5"
-          >
-            <Download className="w-3.5 h-3.5" />
-            APK
-          </button>
-        </div>
-      </div>
-
-      {phoneFrameMode ? (
-        <div className="flex-1 flex items-center justify-center p-3 sm:p-5">
-          <div className="relative flex items-start">
-            <div className="w-[384px] sm:w-[396px] h-[760px] max-h-[85vh] rounded-[44px] bg-[#D8DDE5] p-[9px] shadow-[0_20px_50px_-15px_rgba(17,19,24,0.18)] border border-[#C6CDD8]">
-              <div className="w-full h-full rounded-[36px] overflow-hidden border border-ghost-border bg-ghost-canvas">
-                {androidAppContent}
-              </div>
-            </div>
-
-            <div className="hidden sm:flex flex-col gap-2.5 mt-28 -ml-[1px]">
-              <div className="w-1 h-9 bg-[#BFC6D2] rounded-r" />
-              <div className="w-1 h-11 bg-[#BFC6D2] rounded-r mt-2" />
-              <button
-                type="button"
-                onClick={() => setHardwareKillSignal((s) => s + 1)}
-                className="w-2 h-12 bg-ghost-red hover:w-3 transition-all rounded-r shadow-neonSm cursor-pointer"
-                title="Volume-Down Stop Key"
-              />
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="flex-1 max-w-md w-full mx-auto bg-ghost-canvas min-h-[calc(100vh-48px)] flex flex-col">
+    <div className="min-h-screen flex items-center justify-center bg-ghost-canvas text-ghost-ink sm:p-5">
+      <div className="relative flex items-start w-full sm:w-auto min-h-screen sm:min-h-0">
+        <div className="w-full sm:w-[404px] h-screen sm:h-[780px] sm:max-h-[90vh] bg-ghost-surface sm:border-2 sm:border-ghost-borderStrong rounded-none sm:rounded-[4px] sm:shadow-2xl overflow-hidden flex flex-col">
           {androidAppContent}
         </div>
-      )}
+
+        {/* Simulated Volume-Down Hardware Kill-Switch on Desktop */}
+        <div className="hidden sm:flex flex-col gap-2.5 mt-28">
+          <div className="w-1.5 h-9 bg-ghost-borderStrong" />
+          <div className="w-1.5 h-11 bg-ghost-borderStrong mt-2" />
+          <button
+            type="button"
+            onClick={() => setHardwareKillSignal((s) => s + 1)}
+            className="w-2.5 h-12 bg-ghost-red hover:w-3.5 transition-all shadow-neonSm cursor-pointer"
+            title="Volume-Down Stop Key"
+          />
+        </div>
+      </div>
 
       {previewTask && (
         <LiveScreenStage
@@ -429,13 +369,6 @@ export function App() {
           onClose={() => setPreviewTask(null)}
           onHistoryAdded={(item) => setHistory((prev) => [item, ...prev])}
           externalKillSignal={hardwareKillSignal}
-        />
-      )}
-
-      {showApkModal && (
-        <ApkStudioModal
-          meta={apkMeta}
-          onClose={() => setShowApkModal(false)}
         />
       )}
     </div>
