@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
 import {
-  Bird,
   Clock,
   Moon,
   Plus,
@@ -44,6 +43,8 @@ import { CommandDeck } from './components/CommandDeck';
 import { QueueView } from './components/QueueView';
 import { SetupView } from './components/SetupView';
 import { LiveScreenStage } from './components/LiveScreenStage';
+import ghostLogoLight from '../ghost-soft-ui-logo.png';
+import ghostLogoDark from '../ghost-soft-ui-logo-dark.png';
 
 type ActiveTab = 'new' | 'scheduled' | 'settings';
 
@@ -405,8 +406,13 @@ export function App() {
       {/* Raised tactile app bar */}
       <header className="soft-header">
         <div className="soft-header-brand">
-          <div className="soft-icon-well" aria-hidden="true">
-            <Bird />
+          <div className="soft-icon-well soft-header-logo-well" aria-hidden="true">
+            <img
+              src={darkMode ? ghostLogoDark : ghostLogoLight}
+              alt=""
+              className="soft-header-logo"
+              draggable={false}
+            />
           </div>
           <div className="min-w-0">
             <div className="brand-wordmark">Ghost</div>
