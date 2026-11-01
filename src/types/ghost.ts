@@ -7,6 +7,15 @@ export interface SavedContact {
   name: string;
   phone: string;
   initials: string;
+  isFavourite?: boolean;
+}
+
+export interface BatchRecipient {
+  contactId: string;
+  contactName: string;
+  contactPhone: string;
+  contactInitials: string;
+  messageBody: string;
 }
 
 export interface ScheduledWhatsAppTask {
@@ -16,6 +25,7 @@ export interface ScheduledWhatsAppTask {
   contactPhone: string;
   contactInitials: string;
   messageBody: string;
+  recipients?: BatchRecipient[];
   scheduledTime24: string; // "HH:MM" (00:00 - 23:59)
   scheduledDate: string;   // "YYYY-MM-DD"
   triggerAtMillis: number;

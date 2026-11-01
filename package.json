@@ -1,7 +1,7 @@
 {
   "name": "ghost-whatsapp-scheduler",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.4.0",
   "description": "Ghost — Select a contact and schedule WhatsApp messages at any exact time",
   "type": "module",
   "scripts": {

@@ -97,7 +97,8 @@ public class GhostNativeBridge {
 
     @JavascriptInterface
     public void emergencyStop() {
-        GhostTaskStore.setPendingActiveRun(activity, null);
+        GhostTaskStore.clearAllActiveAndQueuedRuns(activity);
+        GhostTaskScheduler.cancelScheduledCallbacks();
         activity.stopService(new Intent(activity, GhostForegroundService.class));
     }
 

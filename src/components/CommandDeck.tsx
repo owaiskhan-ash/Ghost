@@ -1,15 +1,21 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   BookUser,
   Calendar,
   Check,
   Clock,
+  Pencil,
   Play,
   Plus,
   Repeat,
   Send,
+  Star,
+  Trash2,
+  Users,
+  X,
 } from 'lucide-react';
 import type {
+  BatchRecipient,
   RepeatMode,
   SavedContact,
   ScheduledWhatsAppTask,
@@ -29,6 +35,9 @@ import {
 interface CommandDeckProps {
   contacts: SavedContact[];
   onAddContact: (c: SavedContact) => void;
+  onToggleFavouriteContact: (id: string) => void;
+  onEditContact: (id: string, name: string, phone: string) => void;
+  onDeleteContact: (id: string) => void;
   onScheduleTask: (task: ScheduledWhatsAppTask) => void;
   onPreviewOrSendNow: (task: ScheduledWhatsAppTask) => void;
 }
@@ -43,18 +52,42 @@ function addMinutesFromNow(mins: number): { date: string; time24: string } {
   return { date: `${yyyy}-${mo}-${dd}`, time24: `${hh}:${mm}` };
 }
 
+const LONG_PRESS_MS = 420;
+
 export const CommandDeck: React.FC<CommandDeckProps> = ({
   contacts,
   onAddContact,
+  onToggleFavouriteContact,
+  onEditContact,
+  onDeleteContact,
   onScheduleTask,
   onPreviewOrSendNow,
 }) => {
   const nativeMode = isRunningInNativeApk();
 
+  // Sort contacts so Favourites always appear first
+  const sortedContacts = useMemo(() => {
+    const favs = contacts.filter((c) => c.isFavourite);
+    const others = contacts.filter((c) => !c.isFavourite);
+    return [...favs, ...others];
+  }, [contacts]);
+
+  // Single vs Multi-Contact mode
+  const [multiMode, setMultiMode] = useState(false);
   const [selectedContactId, setSelectedContactId] = useState<string>(
-    contacts[0]?.id || ''
+    sortedContacts[0]?.id || ''
   );
+  const [selectedMultiIds, setSelectedMultiIds] = useState<string[]>(() =>
+    sortedContacts.slice(0, 2).map((c) => c.id)
+  );
+
+  // Message state: shared message + optional per-contact custom messages
+  const [messageMode, setMessageMode] = useState<'same' | 'custom'>('custom');
   const [messageBody, setMessageBody] = useState('Good morning');
+  const [customMessages, setCustomMessages] = useState<Record<string, string>>(
+    {}
+  );
+
   const [time24, setTime24] = useState('05:00');
   const [dateStr, setDateStr] = useState(() => getTodayOrTomorrowDate('05:00'));
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('once');
@@ -67,17 +100,126 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('+91');
 
-  const activeContact: SavedContact = useMemo(() => {
+  // Long-press contact options sheet state
+  const [pressingContactId, setPressingContactId] = useState<string | null>(
+    null
+  );
+  const [menuContactId, setMenuContactId] = useState<string | null>(null);
+  const [editingInSheet, setEditingInSheet] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const didLongPressRef = useRef(false);
+
+  const menuContact = useMemo(
+    () => contacts.find((c) => c.id === menuContactId) || null,
+    [contacts, menuContactId]
+  );
+
+  const activeSingleContact: SavedContact | null = useMemo(() => {
+    if (sortedContacts.length === 0) return null;
     return (
-      contacts.find((c) => c.id === selectedContactId) ||
-      contacts[0] || {
-        id: 'c-fallback',
-        name: 'Jasmine',
-        phone: '+919820448210',
-        initials: 'JA',
-      }
+      sortedContacts.find((c) => c.id === selectedContactId) ||
+      sortedContacts[0]
     );
-  }, [contacts, selectedContactId]);
+  }, [sortedContacts, selectedContactId]);
+
+  const activeMultiContacts: SavedContact[] = useMemo(() => {
+    const valid = selectedMultiIds
+      .map((id) => contacts.find((c) => c.id === id))
+      .filter((c): c is SavedContact => Boolean(c));
+    if (valid.length > 0) return valid;
+    return sortedContacts[0] ? [sortedContacts[0]] : [];
+  }, [selectedMultiIds, contacts, sortedContacts]);
+
+  const clearLongPressTimer = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    setPressingContactId(null);
+    pointerStartRef.current = null;
+  };
+
+  const openContactMenu = (contact: SavedContact) => {
+    clearLongPressTimer();
+    try {
+      navigator.vibrate?.(16);
+    } catch {}
+    setMenuContactId(contact.id);
+    setEditName(contact.name);
+    setEditPhone(contact.phone);
+    setEditingInSheet(false);
+  };
+
+  const closeContactMenu = () => {
+    setMenuContactId(null);
+    setEditingInSheet(false);
+  };
+
+  const handlePointerDownContact = (
+    contact: SavedContact,
+    e: React.PointerEvent<HTMLButtonElement>
+  ) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    didLongPressRef.current = false;
+    pointerStartRef.current = { x: e.clientX, y: e.clientY };
+    setPressingContactId(contact.id);
+
+    if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    longPressTimerRef.current = setTimeout(() => {
+      didLongPressRef.current = true;
+      openContactMenu(contact);
+    }, LONG_PRESS_MS);
+  };
+
+  const handlePointerMoveContact = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!pointerStartRef.current) return;
+    const dx = Math.abs(e.clientX - pointerStartRef.current.x);
+    const dy = Math.abs(e.clientY - pointerStartRef.current.y);
+    if (dx > 10 || dy > 10) {
+      clearLongPressTimer();
+    }
+  };
+
+  const handleTapContact = (c: SavedContact) => {
+    if (!multiMode) {
+      setSelectedContactId(c.id);
+      return;
+    }
+    setSelectedMultiIds((prev) => {
+      const exists = prev.includes(c.id);
+      if (exists) {
+        if (prev.length <= 1) return prev;
+        return prev.filter((id) => id !== c.id);
+      }
+      return [...prev, c.id];
+    });
+  };
+
+  const toggleMultiMode = () => {
+    setMultiMode((prev) => {
+      const next = !prev;
+      if (next) {
+        // Seed multi-selection with current active contact + next contact if <2 selected
+        setSelectedMultiIds((curr) => {
+          const valid = curr.filter((id) => contacts.some((c) => c.id === id));
+          if (valid.length >= 2) return valid;
+          const seed: string[] = [];
+          if (activeSingleContact) seed.push(activeSingleContact.id);
+          for (const item of sortedContacts) {
+            if (!seed.includes(item.id) && seed.length < 2) {
+              seed.push(item.id);
+            }
+          }
+          return seed;
+        });
+      }
+      return next;
+    });
+  };
 
   // Derived 12-hour parts for crisp hour / minute / AM-PM controls
   const parsedTime = useMemo(() => {
@@ -131,51 +273,153 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
     };
     onAddContact(created);
     setSelectedContactId(created.id);
+    if (multiMode) {
+      setSelectedMultiIds((prev) => [...prev, created.id]);
+    }
     setNewName('');
     setNewPhone('+91');
     setShowAddContact(false);
+  };
+
+  const handleSaveEditedContact = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!menuContact || !editName.trim() || !editPhone.trim()) return;
+    const cleanPhone = editPhone.replace(/[^\d+]/g, '');
+    if (!cleanPhone) return;
+    onEditContact(menuContact.id, editName.trim(), cleanPhone);
+    closeContactMenu();
   };
 
   const handlePickNativeContact = () => {
     const ok = launchNativeContactPicker((picked) => {
       onAddContact(picked);
       setSelectedContactId(picked.id);
+      if (multiMode) {
+        setSelectedMultiIds((prev) =>
+          prev.includes(picked.id) ? prev : [...prev, picked.id]
+        );
+      }
     });
     if (!ok) {
       setShowAddContact(true);
     }
   };
 
-  const buildTask = (): ScheduledWhatsAppTask => ({
-    id: `task-${Date.now()}`,
-    contactId: activeContact.id,
-    contactName: activeContact.name,
-    contactPhone: activeContact.phone,
-    contactInitials: activeContact.initials,
-    messageBody: messageBody.trim() || 'Good morning',
-    scheduledTime24: time24,
-    scheduledDate: dateStr,
-    triggerAtMillis: computeTriggerMillis(dateStr, time24),
-    repeatMode,
-    whatsappPackage,
-    enabled: true,
-  });
+  const buildTask = (): ScheduledWhatsAppTask | null => {
+    if (!multiMode || activeMultiContacts.length <= 1) {
+      const target = multiMode ? activeMultiContacts[0] : activeSingleContact;
+      if (!target) {
+        setShowAddContact(true);
+        return null;
+      }
+      return {
+        id: `task-${Date.now()}`,
+        contactId: target.id,
+        contactName: target.name,
+        contactPhone: target.phone,
+        contactInitials: target.initials,
+        messageBody: messageBody.trim() || 'Good morning',
+        scheduledTime24: time24,
+        scheduledDate: dateStr,
+        triggerAtMillis: computeTriggerMillis(dateStr, time24),
+        repeatMode,
+        whatsappPackage,
+        enabled: true,
+      };
+    }
+
+    const recipients: BatchRecipient[] = activeMultiContacts.map((c) => {
+      const msg =
+        messageMode === 'custom'
+          ? (customMessages[c.id] ?? '').trim() ||
+            messageBody.trim() ||
+            `Hi ${c.name}`
+          : messageBody.trim() || 'Good morning';
+      return {
+        contactId: c.id,
+        contactName: c.name,
+        contactPhone: c.phone,
+        contactInitials: c.initials,
+        messageBody: msg,
+      };
+    });
+
+    const first = recipients[0];
+    const summaryLabel =
+      recipients.length === 2
+        ? `${recipients[0].contactName} & ${recipients[1].contactName}`
+        : `${recipients[0].contactName}, ${recipients[1].contactName} +${
+            recipients.length - 2
+          }`;
+
+    return {
+      id: `task-${Date.now()}`,
+      contactId: first.contactId,
+      contactName: summaryLabel,
+      contactPhone: first.contactPhone,
+      contactInitials: `${recipients.length}x`,
+      messageBody:
+        messageMode === 'same'
+          ? first.messageBody
+          : `${recipients.length} custom messages`,
+      recipients,
+      scheduledTime24: time24,
+      scheduledDate: dateStr,
+      triggerAtMillis: computeTriggerMillis(dateStr, time24),
+      repeatMode,
+      whatsappPackage,
+      enabled: true,
+    };
+  };
 
   const handleSchedule = () => {
-    onScheduleTask(buildTask());
+    const task = buildTask();
+    if (!task) return;
+    onScheduleTask(task);
     setScheduledToast(true);
     setTimeout(() => setScheduledToast(false), 2200);
   };
 
+  const handlePreview = () => {
+    const task = buildTask();
+    if (!task) return;
+    onPreviewOrSendNow(task);
+  };
+
+  const isMultiBatch = multiMode && activeMultiContacts.length > 1;
+
   return (
     <div className="space-y-3.5 pb-4">
-      {/* 1. SELECT CONTACT */}
+      {/* 1. SELECT CONTACT(S) (Tap to select · Multi for multiple · Hold for options) */}
       <section className="rounded-3xl bg-ghost-surface border border-ghost-border p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-ghost-secondary">
-            Contact
-          </span>
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-xs font-semibold text-ghost-secondary">
+              {multiMode ? `Contacts (${activeMultiContacts.length})` : 'Contact'}
+            </span>
+            {sortedContacts.length > 0 && (
+              <span className="text-[11px] text-ghost-muted truncate">
+                · Hold for options
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {sortedContacts.length > 1 && (
+              <button
+                type="button"
+                onClick={toggleMultiMode}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition ${
+                  multiMode
+                    ? 'bg-ghost-red text-white shadow-neonSm'
+                    : 'bg-ghost-recessed text-ghost-secondary hover:text-ghost-ink'
+                }`}
+              >
+                <Users className="w-3 h-3" />
+                Multi
+              </button>
+            )}
+
             {nativeMode && (
               <button
                 type="button"
@@ -188,14 +432,14 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             <button
               type="button"
               onClick={() => setShowAddContact((v) => !v)}
-              className="text-xs font-semibold text-ghost-red flex items-center gap-0.5"
+              className="px-2 py-1 text-xs font-semibold text-ghost-red flex items-center gap-0.5"
             >
               <Plus className="w-3.5 h-3.5" /> Add
             </button>
           </div>
         </div>
 
-        {showAddContact && (
+        {(showAddContact || sortedContacts.length === 0) && (
           <form
             onSubmit={handleSaveContact}
             className="p-2.5 rounded-2xl bg-ghost-recessed flex flex-col sm:flex-row gap-2"
@@ -223,43 +467,80 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
           </form>
         )}
 
-        <div className="flex flex-wrap gap-2">
-          {contacts.map((c) => {
-            const selected = c.id === activeContact.id;
-            return (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setSelectedContactId(c.id)}
-                className={`px-3 py-2 rounded-2xl text-xs font-semibold transition flex items-center gap-2 border ${
-                  selected
-                    ? 'bg-ghost-red text-white border-ghost-red shadow-neonSm'
-                    : 'bg-white text-ghost-ink border-ghost-border hover:border-ghost-borderStrong'
-                }`}
-              >
-                <span
-                  className={`w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center ${
+        {sortedContacts.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {sortedContacts.map((c) => {
+              const multiOrderIdx = activeMultiContacts.findIndex(
+                (mc) => mc.id === c.id
+              );
+              const selected = multiMode
+                ? multiOrderIdx !== -1
+                : activeSingleContact?.id === c.id;
+              const isPressing = pressingContactId === c.id;
+
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onPointerDown={(e) => handlePointerDownContact(c, e)}
+                  onPointerMove={handlePointerMoveContact}
+                  onPointerUp={clearLongPressTimer}
+                  onPointerLeave={clearLongPressTimer}
+                  onPointerCancel={clearLongPressTimer}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    didLongPressRef.current = true;
+                    openContactMenu(c);
+                  }}
+                  onClick={(e) => {
+                    if (didLongPressRef.current) {
+                      didLongPressRef.current = false;
+                      e.preventDefault();
+                      return;
+                    }
+                    handleTapContact(c);
+                  }}
+                  className={`no-touch-callout touch-manipulation px-3 py-2 rounded-2xl text-xs font-semibold transition flex items-center gap-2 border ${
+                    isPressing ? 'scale-[0.96] ring-2 ring-ghost-red/50' : ''
+                  } ${
                     selected
-                      ? 'bg-white/20 text-white'
-                      : 'bg-ghost-recessed text-ghost-ink'
+                      ? 'bg-ghost-red text-white border-ghost-red shadow-neonSm'
+                      : 'bg-white text-ghost-ink border-ghost-border hover:border-ghost-borderStrong'
                   }`}
                 >
-                  {c.initials}
-                </span>
-                <div className="text-left">
-                  <div className="leading-tight">{c.name}</div>
-                  <div
-                    className={`text-[10px] font-mono leading-tight ${
-                      selected ? 'text-white/80' : 'text-ghost-muted'
+                  <span
+                    className={`relative w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                      selected
+                        ? 'bg-white/20 text-white'
+                        : 'bg-ghost-recessed text-ghost-ink'
                     }`}
                   >
-                    {c.phone}
+                    {multiMode && selected ? multiOrderIdx + 1 : c.initials}
+                  </span>
+                  <div className="text-left">
+                    <div className="leading-tight flex items-center gap-1">
+                      <span>{c.name}</span>
+                      {c.isFavourite && (
+                        <Star
+                          className={`w-3 h-3 fill-current ${
+                            selected ? 'text-white' : 'text-ghost-red'
+                          }`}
+                        />
+                      )}
+                    </div>
+                    <div
+                      className={`text-[10px] font-mono leading-tight ${
+                        selected ? 'text-white/80' : 'text-ghost-muted'
+                      }`}
+                    >
+                      {c.phone}
+                    </div>
                   </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* 2. PICK ANY TIME & DATE */}
@@ -269,7 +550,6 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             <Clock className="w-3.5 h-3.5 text-ghost-red" /> Time
           </span>
 
-          {/* Quick Time Shortcuts */}
           <div className="flex items-center gap-1">
             {(
               [
@@ -291,10 +571,8 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
           </div>
         </div>
 
-        {/* Exact Hour : Minute + AM/PM Selector */}
         <div className="rounded-2xl bg-white border border-ghost-border p-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
-            {/* Hour 1..12 */}
             <select
               aria-label="Hour"
               value={parsedTime.h12}
@@ -318,7 +596,6 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
               :
             </span>
 
-            {/* Minute 00..59 */}
             <select
               aria-label="Minute"
               value={parsedTime.min}
@@ -339,7 +616,6 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             </select>
           </div>
 
-          {/* AM / PM Switch */}
           <div className="flex bg-ghost-recessed p-1 rounded-xl">
             {(['AM', 'PM'] as const).map((p) => (
               <button
@@ -360,7 +636,6 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
           </div>
         </div>
 
-        {/* Date & Repeat Row */}
         <div className="grid grid-cols-2 gap-2">
           <div className="rounded-2xl bg-white border border-ghost-border px-3 py-2 flex items-center gap-2">
             <Calendar className="w-3.5 h-3.5 text-ghost-red shrink-0" />
@@ -390,12 +665,41 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
         </div>
       </section>
 
-      {/* 3. MESSAGE */}
+      {/* 3. MESSAGE (Single or Multi Same / Custom per person) */}
       <section className="rounded-3xl bg-ghost-surface border border-ghost-border p-4 space-y-2.5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-ghost-secondary">
-            Message
-          </span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-ghost-secondary">
+              Message
+            </span>
+
+            {isMultiBatch && (
+              <div className="flex bg-ghost-recessed p-0.5 rounded-full text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setMessageMode('custom')}
+                  className={`px-2 py-0.5 rounded-full font-semibold transition ${
+                    messageMode === 'custom'
+                      ? 'bg-ghost-red text-white'
+                      : 'text-ghost-secondary'
+                  }`}
+                >
+                  Per Person
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMessageMode('same')}
+                  className={`px-2 py-0.5 rounded-full font-semibold transition ${
+                    messageMode === 'same'
+                      ? 'bg-ghost-red text-white'
+                      : 'text-ghost-secondary'
+                  }`}
+                >
+                  Same
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="flex bg-ghost-recessed p-0.5 rounded-full text-[11px]">
             <button
@@ -423,19 +727,49 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
           </div>
         </div>
 
-        <textarea
-          rows={2}
-          value={messageBody}
-          onChange={(e) => setMessageBody(e.target.value)}
-          placeholder="Write your WhatsApp message…"
-          className="w-full rounded-2xl bg-white border border-ghost-border focus:border-ghost-red focus:outline-none px-3.5 py-2.5 text-sm font-medium text-ghost-ink placeholder:text-ghost-muted resize-none"
-        />
+        {isMultiBatch && messageMode === 'custom' ? (
+          <div className="space-y-2">
+            {activeMultiContacts.map((c, idx) => (
+              <div
+                key={c.id}
+                className="rounded-2xl bg-white border border-ghost-border focus-within:border-ghost-red px-3 py-2 flex items-center gap-2.5"
+              >
+                <span className="px-2 py-0.5 rounded-full bg-ghost-redSoft text-ghost-red text-[11px] font-bold shrink-0">
+                  {idx + 1}. {c.name}
+                </span>
+                <input
+                  type="text"
+                  value={customMessages[c.id] ?? ''}
+                  onChange={(e) =>
+                    setCustomMessages((prev) => ({
+                      ...prev,
+                      [c.id]: e.target.value,
+                    }))
+                  }
+                  placeholder={`Message for ${c.name}…`}
+                  className="flex-1 bg-transparent text-xs font-medium text-ghost-ink placeholder:text-ghost-muted focus:outline-none min-w-0"
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <textarea
+            rows={2}
+            value={messageBody}
+            onChange={(e) => setMessageBody(e.target.value)}
+            placeholder={
+              isMultiBatch
+                ? `Write message for all ${activeMultiContacts.length} contacts…`
+                : 'Write your WhatsApp message…'
+            }
+            className="w-full rounded-2xl bg-white border border-ghost-border focus:border-ghost-red focus:outline-none px-3.5 py-2.5 text-sm font-medium text-ghost-ink placeholder:text-ghost-muted resize-none"
+          />
+        )}
 
-        {/* Action Buttons */}
         <div className="grid grid-cols-5 gap-2.5 pt-1">
           <button
             type="button"
-            onClick={() => onPreviewOrSendNow(buildTask())}
+            onClick={handlePreview}
             className="col-span-2 py-3 rounded-2xl bg-ghost-recessed hover:bg-ghost-border text-ghost-ink font-semibold text-xs transition flex items-center justify-center gap-1.5"
           >
             <Play className="w-3.5 h-3.5 text-ghost-red fill-current" />
@@ -455,12 +789,146 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             ) : (
               <>
                 <Send className="w-3.5 h-3.5" />
-                Schedule · {formatTime12h(time24)}
+                {isMultiBatch
+                  ? `Schedule (${activeMultiContacts.length}) · ${formatTime12h(
+                      time24
+                    )}`
+                  : `Schedule · ${formatTime12h(time24)}`}
               </>
             )}
           </button>
         </div>
       </section>
+
+      {/* LONG-TAP CONTACT ACTION SHEET (Favourite / Edit / Delete) */}
+      {menuContact && (
+        <div
+          onClick={closeContactMenu}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-ghost-ink/40 backdrop-blur-sm p-3"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-xs rounded-3xl bg-ghost-surface border border-ghost-border shadow-2xl p-4 space-y-3"
+          >
+            {/* Contact Header */}
+            <div className="flex items-center justify-between pb-2 border-b border-ghost-border">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-full bg-ghost-red text-white text-xs font-bold flex items-center justify-center shrink-0">
+                  {menuContact.initials}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm font-bold text-ghost-ink truncate flex items-center gap-1">
+                    <span>{menuContact.name}</span>
+                    {menuContact.isFavourite && (
+                      <Star className="w-3.5 h-3.5 text-ghost-red fill-current shrink-0" />
+                    )}
+                  </div>
+                  <div className="text-xs font-mono text-ghost-muted truncate">
+                    {menuContact.phone}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={closeContactMenu}
+                className="p-1.5 rounded-full bg-ghost-recessed text-ghost-ink hover:bg-ghost-border transition"
+                aria-label="Close options"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {!editingInSheet ? (
+              <div className="space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onToggleFavouriteContact(menuContact.id);
+                    closeContactMenu();
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-2xl bg-white hover:bg-ghost-recessed border border-ghost-border text-xs font-semibold text-ghost-ink flex items-center gap-2.5 transition"
+                >
+                  <Star
+                    className={`w-4 h-4 text-ghost-red ${
+                      menuContact.isFavourite ? 'fill-current' : ''
+                    }`}
+                  />
+                  <span>
+                    {menuContact.isFavourite
+                      ? 'Remove from Favourites'
+                      : 'Add to Favourites'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditName(menuContact.name);
+                    setEditPhone(menuContact.phone);
+                    setEditingInSheet(true);
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-2xl bg-white hover:bg-ghost-recessed border border-ghost-border text-xs font-semibold text-ghost-ink flex items-center gap-2.5 transition"
+                >
+                  <Pencil className="w-4 h-4 text-ghost-red" />
+                  <span>Edit Contact</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDeleteContact(menuContact.id);
+                    setSelectedMultiIds((prev) =>
+                      prev.filter((id) => id !== menuContact.id)
+                    );
+                    closeContactMenu();
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-2xl bg-ghost-redSoft hover:bg-ghost-red text-ghost-red hover:text-white text-xs font-semibold flex items-center gap-2.5 transition"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Delete Contact</span>
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSaveEditedContact} className="space-y-2.5">
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Contact Name"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    autoFocus
+                    className="w-full rounded-xl bg-white border border-ghost-border focus:border-ghost-red px-3 py-2 text-xs font-medium text-ghost-ink focus:outline-none"
+                  />
+                  <input
+                    type="tel"
+                    placeholder="+919820448210"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full rounded-xl bg-white border border-ghost-border focus:border-ghost-red px-3 py-2 text-xs font-mono text-ghost-ink focus:outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setEditingInSheet(false)}
+                    className="py-2.5 rounded-xl bg-ghost-recessed text-xs font-semibold text-ghost-secondary hover:text-ghost-ink transition"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    className="py-2.5 rounded-xl bg-ghost-red hover:bg-ghost-redHover text-white text-xs font-bold shadow-neonSm transition"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

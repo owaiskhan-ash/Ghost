@@ -19,6 +19,7 @@ import {
   INITIAL_CONTACTS,
   INITIAL_HISTORY,
   INITIAL_TASKS,
+  makeInitials,
 } from './data/seedData';
 import {
   cancelNativeAlarmTask,
@@ -37,9 +38,9 @@ import { ApkStudioModal } from './components/ApkStudioModal';
 type ActiveTab = 'new' | 'scheduled' | 'setup';
 
 const STORAGE_KEYS = {
-  contacts: 'ghost_contacts_v3',
-  tasks: 'ghost_tasks_v3',
-  history: 'ghost_history_v3',
+  contacts: 'ghost_contacts_v4',
+  tasks: 'ghost_tasks_v4',
+  history: 'ghost_history_v4',
 };
 
 function loadStored<T>(key: string, fallback: T): T {
@@ -147,6 +148,75 @@ export function App() {
     });
   };
 
+  const handleToggleFavouriteContact = (id: string) => {
+    setContacts((prev) =>
+      prev.map((c) =>
+        c.id === id ? { ...c, isFavourite: !c.isFavourite } : c
+      )
+    );
+  };
+
+  const handleEditContact = (id: string, name: string, phone: string) => {
+    const initials = makeInitials(name);
+    setContacts((prev) =>
+      prev.map((c) =>
+        c.id === id ? { ...c, name, phone, initials } : c
+      )
+    );
+    // Keep any single or multi-contact scheduled tasks synced with the updated name & phone
+    setTasks((prev) =>
+      prev.map((t) => {
+        const matchesPrimary = t.contactId === id;
+        const matchesBatch = t.recipients?.some((r) => r.contactId === id);
+        if (!matchesPrimary && !matchesBatch) return t;
+
+        const updatedRecipients = t.recipients?.map((r) =>
+          r.contactId === id
+            ? {
+                ...r,
+                contactName: name,
+                contactPhone: phone,
+                contactInitials: initials,
+              }
+            : r
+        );
+
+        let updatedName = t.contactName;
+        if (updatedRecipients && updatedRecipients.length > 1) {
+          updatedName =
+            updatedRecipients.length === 2
+              ? `${updatedRecipients[0].contactName} & ${updatedRecipients[1].contactName}`
+              : `${updatedRecipients[0].contactName}, ${
+                  updatedRecipients[1].contactName
+                } +${updatedRecipients.length - 2}`;
+        } else if (matchesPrimary) {
+          updatedName = name;
+        }
+
+        const updatedTask: ScheduledWhatsAppTask = {
+          ...t,
+          contactName: updatedName,
+          contactPhone: matchesPrimary ? phone : t.contactPhone,
+          contactInitials:
+            updatedRecipients && updatedRecipients.length > 1
+              ? t.contactInitials
+              : matchesPrimary
+                ? initials
+                : t.contactInitials,
+          recipients: updatedRecipients,
+        };
+        if (updatedTask.enabled) {
+          scheduleNativeAlarmTask(updatedTask);
+        }
+        return updatedTask;
+      })
+    );
+  };
+
+  const handleDeleteContact = (id: string) => {
+    setContacts((prev) => prev.filter((c) => c.id !== id));
+  };
+
   const handleScheduleTask = (task: ScheduledWhatsAppTask) => {
     scheduleNativeAlarmTask(task);
     setTasks((prev) => [task, ...prev]);
@@ -219,6 +289,9 @@ export function App() {
           <CommandDeck
             contacts={contacts}
             onAddContact={handleAddContact}
+            onToggleFavouriteContact={handleToggleFavouriteContact}
+            onEditContact={handleEditContact}
+            onDeleteContact={handleDeleteContact}
             onScheduleTask={handleScheduleTask}
             onPreviewOrSendNow={handleRunOrPreview}
           />
@@ -291,7 +364,7 @@ export function App() {
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-ghost-red" />
           <span className="text-xs font-bold tracking-tight text-ghost-ink">
-            Ghost v1.2
+            Ghost v1.4
           </span>
         </div>
 

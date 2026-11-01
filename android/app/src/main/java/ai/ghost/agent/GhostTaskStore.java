@@ -12,6 +12,7 @@ public final class GhostTaskStore {
     private static final String KEY_TASKS = "scheduled_tasks";
     private static final String KEY_RECEIPTS = "morning_receipts";
     private static final String KEY_PENDING_RUN = "pending_active_run";
+    private static final String KEY_RUN_QUEUE = "pending_run_queue";
 
     private GhostTaskStore() {}
 
@@ -79,6 +80,92 @@ public final class GhostTaskStore {
         prefs(ctx).edit().putString(KEY_TASKS, updated.toString()).apply();
     }
 
+    public static JSONArray expandTaskIntoSteps(JSONObject task) {
+        JSONArray steps = new JSONArray();
+        if (task == null) return steps;
+
+        String taskId = task.optString("id", "task");
+        String pkg = task.optString("whatsappPackage", "com.whatsapp");
+        String fallbackMsg = task.optString("messageBody", "");
+        JSONArray recipients = task.optJSONArray("recipients");
+
+        try {
+            if (recipients != null && recipients.length() > 0) {
+                int total = recipients.length();
+                for (int i = 0; i < total; i++) {
+                    JSONObject r = recipients.optJSONObject(i);
+                    if (r == null) continue;
+                    String phone = r.optString("contactPhone", "");
+                    if (phone.isEmpty()) continue;
+
+                    JSONObject step = new JSONObject();
+                    step.put("id", taskId);
+                    step.put("contactName", r.optString("contactName", "Contact"));
+                    step.put("contactPhone", phone);
+                    String msg = r.optString("messageBody", fallbackMsg);
+                    step.put("messageBody", msg);
+                    step.put("whatsappPackage", pkg);
+                    step.put("_stepIndex", i + 1);
+                    step.put("_stepTotal", total);
+                    steps.put(step);
+                }
+            } else {
+                JSONObject step = new JSONObject();
+                step.put("id", taskId);
+                step.put("contactName", task.optString("contactName", "Contact"));
+                step.put("contactPhone", task.optString("contactPhone", ""));
+                step.put("messageBody", fallbackMsg);
+                step.put("whatsappPackage", pkg);
+                step.put("_stepIndex", 1);
+                step.put("_stepTotal", 1);
+                steps.put(step);
+            }
+        } catch (JSONException ignored) {
+        }
+        return steps;
+    }
+
+    public static synchronized JSONArray getRunQueue(Context ctx) {
+        String raw = prefs(ctx).getString(KEY_RUN_QUEUE, "[]");
+        try {
+            return new JSONArray(raw);
+        } catch (JSONException e) {
+            return new JSONArray();
+        }
+    }
+
+    public static synchronized void enqueueRunSteps(Context ctx, JSONArray newSteps) {
+        if (newSteps == null || newSteps.length() == 0) return;
+        JSONArray current = getRunQueue(ctx);
+        for (int i = 0; i < newSteps.length(); i++) {
+            JSONObject step = newSteps.optJSONObject(i);
+            if (step != null) {
+                current.put(step);
+            }
+        }
+        prefs(ctx).edit().putString(KEY_RUN_QUEUE, current.toString()).apply();
+    }
+
+    public static synchronized JSONObject popNextRunStep(Context ctx) {
+        JSONArray current = getRunQueue(ctx);
+        if (current.length() == 0) return null;
+
+        JSONObject head = current.optJSONObject(0);
+        JSONArray rest = new JSONArray();
+        for (int i = 1; i < current.length(); i++) {
+            JSONObject item = current.optJSONObject(i);
+            if (item != null) {
+                rest.put(item);
+            }
+        }
+        prefs(ctx).edit().putString(KEY_RUN_QUEUE, rest.toString()).apply();
+        return head;
+    }
+
+    public static synchronized int getRemainingQueueCount(Context ctx) {
+        return getRunQueue(ctx).length();
+    }
+
     public static synchronized void setPendingActiveRun(Context ctx, JSONObject task) {
         if (task == null) {
             prefs(ctx).edit().remove(KEY_PENDING_RUN).apply();
@@ -95,6 +182,13 @@ public final class GhostTaskStore {
         } catch (JSONException e) {
             return null;
         }
+    }
+
+    public static synchronized void clearAllActiveAndQueuedRuns(Context ctx) {
+        prefs(ctx).edit()
+                .remove(KEY_PENDING_RUN)
+                .remove(KEY_RUN_QUEUE)
+                .apply();
     }
 
     public static synchronized void appendReceipt(

@@ -7,6 +7,9 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.PowerManager;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -15,6 +18,10 @@ import java.util.Calendar;
 
 public final class GhostTaskScheduler {
     public static final String EXTRA_TASK_ID = "extra_task_id";
+    private static final long CHAT_SETTLE_DELAY_MS = 1450L;
+
+    private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
+    private static PowerManager.WakeLock batchWakeLock;
 
     private GhostTaskScheduler() {}
 
@@ -109,30 +116,109 @@ public final class GhostTaskScheduler {
         }
     }
 
-    public static void launchWhatsAppTaskNow(Context ctx, JSONObject task) {
+    @SuppressWarnings("deprecation")
+    public static synchronized void acquireBatchWakeLock(Context ctx, long durationMs) {
         try {
-            task.put("_activatedAtMs", System.currentTimeMillis());
+            releaseBatchWakeLock();
+            PowerManager pm = (PowerManager) ctx.getApplicationContext().getSystemService(Context.POWER_SERVICE);
+            if (pm != null) {
+                batchWakeLock = pm.newWakeLock(
+                        PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                        "ghost:MultiSendWakeLock"
+                );
+                batchWakeLock.acquire(Math.max(durationMs, 30_000L));
+            }
         } catch (Exception ignored) {
         }
-        GhostTaskStore.setPendingActiveRun(ctx, task);
+    }
 
-        Intent fg = new Intent(ctx, GhostForegroundService.class);
-        fg.putExtra("contactName", task.optString("contactName", "Contact"));
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            ctx.startForegroundService(fg);
-        } else {
-            ctx.startService(fg);
+    public static synchronized void releaseBatchWakeLock() {
+        try {
+            if (batchWakeLock != null && batchWakeLock.isHeld()) {
+                batchWakeLock.release();
+            }
+        } catch (Exception ignored) {
+        }
+        batchWakeLock = null;
+    }
+
+    public static void cancelScheduledCallbacks() {
+        MAIN_HANDLER.removeCallbacksAndMessages(null);
+        releaseBatchWakeLock();
+    }
+
+    public static void launchWhatsAppTaskNow(Context ctx, JSONObject task) {
+        final Context appCtx = ctx.getApplicationContext();
+        JSONArray steps = GhostTaskStore.expandTaskIntoSteps(task);
+        if (steps.length() == 0) return;
+
+        GhostTaskStore.enqueueRunSteps(appCtx, steps);
+        int totalPending = GhostTaskStore.getRemainingQueueCount(appCtx) + 1;
+        acquireBatchWakeLock(appCtx, totalPending * 15_000L + 15_000L);
+
+        if (GhostTaskStore.getPendingActiveRun(appCtx) == null) {
+            launchNextQueuedStep(appCtx);
+        }
+    }
+
+    public static void scheduleNextQueuedStepAfterDelay(final Context ctx, long delayMs) {
+        final Context appCtx = ctx.getApplicationContext();
+        MAIN_HANDLER.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                launchNextQueuedStep(appCtx);
+            }
+        }, delayMs);
+    }
+
+    public static void launchNextQueuedStep(Context ctx) {
+        final Context appCtx = ctx.getApplicationContext();
+        if (GhostTaskStore.getPendingActiveRun(appCtx) != null) {
+            return;
         }
 
-        String rawPhone = task.optString("contactPhone", "").replaceAll("[^0-9]", "");
-        String msg = task.optString("messageBody", "");
-        String preferredPkg = task.optString("whatsappPackage", "com.whatsapp");
+        JSONObject step = GhostTaskStore.popNextRunStep(appCtx);
+        if (step == null) {
+            appCtx.stopService(new Intent(appCtx, GhostForegroundService.class));
+            releaseBatchWakeLock();
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        try {
+            step.put("_activatedAtMs", now);
+            step.put("_readyAfterMs", now + CHAT_SETTLE_DELAY_MS);
+        } catch (Exception ignored) {
+        }
+        GhostTaskStore.setPendingActiveRun(appCtx, step);
+
+        int remainingAfterThis = GhostTaskStore.getRemainingQueueCount(appCtx);
+        String contactLabel = step.optString("contactName", "Contact");
+        int stepIdx = step.optInt("_stepIndex", 1);
+        int stepTotal = step.optInt("_stepTotal", 1);
+        if (stepTotal > 1) {
+            contactLabel = contactLabel + " (" + stepIdx + "/" + stepTotal + ")";
+        } else if (remainingAfterThis > 0) {
+            contactLabel = contactLabel + " (+" + remainingAfterThis + " queued)";
+        }
+
+        Intent fg = new Intent(appCtx, GhostForegroundService.class);
+        fg.putExtra("contactName", contactLabel);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            appCtx.startForegroundService(fg);
+        } else {
+            appCtx.startService(fg);
+        }
+
+        String rawPhone = step.optString("contactPhone", "").replaceAll("[^0-9]", "");
+        String msg = step.optString("messageBody", "");
+        String preferredPkg = step.optString("whatsappPackage", "com.whatsapp");
         String url = "https://api.whatsapp.com/send?phone=" + rawPhone + "&text=" + Uri.encode(msg);
 
         Intent waIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
         waIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
-        PackageManager pm = ctx.getPackageManager();
+        PackageManager pm = appCtx.getPackageManager();
         if (isPackageInstalled(pm, preferredPkg)) {
             waIntent.setPackage(preferredPkg);
         } else if (isPackageInstalled(pm, "com.whatsapp")) {
@@ -145,11 +231,13 @@ public final class GhostTaskScheduler {
             GhostAccessibilityService svc = GhostAccessibilityService.getActiveInstance();
             if (svc != null) {
                 svc.startActivity(waIntent);
+                svc.scheduleWatchdogTick(CHAT_SETTLE_DELAY_MS + 100L);
             } else {
-                ctx.startActivity(waIntent);
+                appCtx.startActivity(waIntent);
             }
         } catch (Exception e) {
-            GhostTaskStore.setPendingActiveRun(ctx, null);
+            GhostTaskStore.setPendingActiveRun(appCtx, null);
+            scheduleNextQueuedStepAfterDelay(appCtx, 1000L);
         }
     }
 
