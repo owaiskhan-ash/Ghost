@@ -11,7 +11,7 @@ export const ApkStudioModal: React.FC<ApkStudioModalProps> = ({
   meta,
   onClose,
 }) => {
-  const version = meta?.versionName || '1.1.0';
+  const version = meta?.versionName || '1.2.0';
   const fileName = meta?.fileName || `Ghost-v${version}.apk`;
   const sizeLabel = meta?.sizeBytes
     ? `${(meta.sizeBytes / 1024).toFixed(0)} KB`
@@ -56,15 +56,15 @@ export const ApkStudioModal: React.FC<ApkStudioModalProps> = ({
         <div className="rounded-2xl bg-ghost-canvas p-3.5 space-y-2 text-xs text-ghost-secondary">
           <div className="flex items-center gap-2">
             <Check className="w-3.5 h-3.5 text-ghost-red shrink-0" />
-            <span>1. Install APK on Android</span>
+            <span>1. Install APK on your Android phone</span>
           </div>
           <div className="flex items-center gap-2">
             <Check className="w-3.5 h-3.5 text-ghost-red shrink-0" />
-            <span>2. Enable Ghost in Accessibility</span>
+            <span>2. Enable Auto-Tap Send in Setup</span>
           </div>
           <div className="flex items-center gap-2">
             <Check className="w-3.5 h-3.5 text-ghost-red shrink-0" />
-            <span>3. Schedule your 5 AM message</span>
+            <span>3. Pick contact, choose any time & schedule</span>
           </div>
         </div>
       </div>

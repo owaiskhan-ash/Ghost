@@ -1,88 +1,38 @@
-export type ExecutionMode = 'hybrid_dual' | 'screen_wake' | 'headless_linked';
+export type RepeatMode = 'once' | 'daily';
 
-export type TriggerType =
-  | 'clock'
-  | 'alarm_dismissed'
-  | 'bluetooth_location'
-  | 'cross_app_chain';
+export type TargetWhatsApp = 'com.whatsapp' | 'com.whatsapp.w4b';
 
-export interface ChatBubble {
-  id: string;
-  sender: 'them' | 'me';
-  text: string;
-  time: string;
-  isUrgentKeyword?: boolean;
-}
-
-export interface ContactProfile {
+export interface SavedContact {
   id: string;
   name: string;
-  tag: string;
   phone: string;
-  maskedPhone: string;
-  relationship: 'personal' | 'work' | 'group' | 'family';
-  avatarInitials: string;
-  preferredTone: string;
-  toneSample: string;
-  whatsappPackage: 'com.whatsapp' | 'com.whatsapp.w4b';
-  recentMessagesNormal: ChatBubble[];
-  recentMessagesEmergency: ChatBubble[];
+  initials: string;
 }
 
-export interface GhostTask {
+export interface ScheduledWhatsAppTask {
   id: string;
-  rawPrompt: string;
   contactId: string;
   contactName: string;
   contactPhone: string;
-  targetApp: 'WhatsApp' | 'WhatsApp Business' | 'Cross-App Chain';
+  contactInitials: string;
   messageBody: string;
-  scheduledTime24: string; // e.g. "05:00"
-  displayTime: string;     // e.g. "05:00 AM"
-  jitterMinutes: number;   // e.g. 6 -> 05:00 AM ± 6m
-  effectiveTime: string;   // e.g. "05:04 AM"
-  triggerType: TriggerType;
-  triggerLabel: string;
-  executionMode: ExecutionMode;
-  contextGuardEnabled: boolean;
-  toneMatched: boolean;
-  conditionalRule?: string;
-  chainSteps?: string[];
+  scheduledTime24: string; // "HH:MM" (00:00 - 23:59)
+  scheduledDate: string;   // "YYYY-MM-DD"
+  triggerAtMillis: number;
+  repeatMode: RepeatMode;
+  whatsappPackage: TargetWhatsApp;
   enabled: boolean;
-  createdAt: string;
+  lastSentAt?: string;
 }
 
-export type ReceiptOutcome =
-  | 'SENT'
-  | 'PAUSED_CONTEXT_GUARD'
-  | 'ABORTED_KILLSWITCH'
-  | 'CHAIN_COMPLETED';
-
-export interface ExecutionReceipt {
+export interface SentHistoryItem {
   id: string;
   taskId: string;
   contactName: string;
-  targetApp: string;
-  executedAt: string;
-  scheduledFor: string;
-  outcome: ReceiptOutcome;
-  messageText: string;
-  reasonDetail: string;
-  durationMs: number;
-  engineLayersUsed: string[];
-  guardrailsBlocked: string[];
-}
-
-export interface RecordedSkill {
-  id: string;
-  name: string;
-  targetPackage: string;
-  appLabel: string;
-  stepsCount: number;
-  avgLatencyMs: number;
-  nodePathSummary: string[];
-  parameterSlots: string[];
-  lastUsed: string;
+  contactPhone: string;
+  messageBody: string;
+  sentAt: string;
+  status: 'SENT' | 'STOPPED';
 }
 
 export interface AndroidDeviceStatus {
@@ -91,8 +41,6 @@ export interface AndroidDeviceStatus {
   androidVersion: string;
   accessibilityEnabled: boolean;
   exactAlarmAllowed: boolean;
-  overlayAllowed: boolean;
-  devicePinLocked: boolean;
   whatsappInstalled: boolean;
 }
 
@@ -108,6 +56,4 @@ export interface ApkMetadata {
   sha256: string;
   builtAt?: string;
   signatureSchemes: string[];
-  nativeClasses?: string[];
-  permissions?: string[];
 }

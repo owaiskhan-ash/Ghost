@@ -9,6 +9,7 @@ import org.json.JSONObject;
 
 public class GhostAlarmReceiver extends BroadcastReceiver {
     @Override
+    @SuppressWarnings("deprecation")
     public void onReceive(Context context, Intent intent) {
         if (intent == null) return;
         String taskId = intent.getStringExtra(GhostTaskScheduler.EXTRA_TASK_ID);
@@ -23,14 +24,23 @@ public class GhostAlarmReceiver extends BroadcastReceiver {
         PowerManager.WakeLock wakeLock = null;
         if (pm != null) {
             wakeLock = pm.newWakeLock(
-                    PowerManager.PARTIAL_WAKE_LOCK,
-                    "ghost:ScheduledAutomationWakeLock"
+                    PowerManager.SCREEN_BRIGHT_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                    "ghost:ScheduledSendWakeLock"
             );
-            wakeLock.acquire(15_000L);
+            wakeLock.acquire(20_000L);
         }
 
         try {
             GhostTaskScheduler.launchWhatsAppTaskNow(context, task);
+
+            String repeatMode = task.optString("repeatMode", "once");
+            if ("daily".equalsIgnoreCase(repeatMode)) {
+                GhostTaskScheduler.scheduleAlarmForTask(context, task);
+            } else {
+                task.put("enabled", false);
+                GhostTaskStore.upsertTask(context, task);
+            }
+        } catch (Exception ignored) {
         } finally {
             if (wakeLock != null && wakeLock.isHeld()) {
                 wakeLock.release();

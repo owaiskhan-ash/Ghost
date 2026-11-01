@@ -2,9 +2,12 @@ package ai.ghost.agent;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.content.Intent;
+import android.database.Cursor;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.ContactsContract;
 import android.view.Window;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -12,6 +15,8 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+
+import org.json.JSONObject;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -22,6 +27,7 @@ public class MainActivity extends Activity {
 
     private static final String VIRTUAL_HOST = "appassets.ghost.local";
     private static final String APP_ENTRY_URL = "https://" + VIRTUAL_HOST + "/index.html";
+    private static final int REQ_PICK_CONTACT = 2001;
 
     private WebView webView;
 
@@ -32,12 +38,12 @@ public class MainActivity extends Activity {
 
         Window window = getWindow();
         if (window != null) {
-            window.setStatusBarColor(Color.parseColor("#EBEEF2"));
-            window.setNavigationBarColor(Color.parseColor("#F6F7F9"));
+            window.setStatusBarColor(Color.parseColor("#ECEEF1"));
+            window.setNavigationBarColor(Color.parseColor("#F7F8FA"));
         }
 
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.parseColor("#EBEEF2"));
+        webView.setBackgroundColor(Color.parseColor("#ECEEF1"));
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -78,6 +84,62 @@ public class MainActivity extends Activity {
 
         setContentView(webView);
         webView.loadUrl(APP_ENTRY_URL);
+    }
+
+    public void launchSystemContactPicker() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Intent pickIntent = new Intent(
+                            Intent.ACTION_PICK,
+                            ContactsContract.CommonDataKinds.Phone.CONTENT_URI
+                    );
+                    startActivityForResult(pickIntent, REQ_PICK_CONTACT);
+                } catch (Exception ignored) {
+                }
+            }
+        });
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_PICK_CONTACT && resultCode == RESULT_OK && data != null) {
+            Uri contactUri = data.getData();
+            if (contactUri == null || webView == null) return;
+            Cursor cursor = null;
+            try {
+                cursor = getContentResolver().query(
+                        contactUri,
+                        new String[]{
+                                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                                ContactsContract.CommonDataKinds.Phone.NUMBER
+                        },
+                        null,
+                        null,
+                        null
+                );
+                if (cursor != null && cursor.moveToFirst()) {
+                    String name = cursor.getString(0);
+                    String phone = cursor.getString(1);
+                    JSONObject payload = new JSONObject();
+                    payload.put("name", name != null ? name : "");
+                    payload.put("phone", phone != null ? phone : "");
+                    final String js = "window.onGhostContactPicked && window.onGhostContactPicked("
+                            + payload.toString() + ");";
+                    webView.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            webView.evaluateJavascript(js, null);
+                        }
+                    });
+                }
+            } catch (Exception ignored) {
+            } finally {
+                if (cursor != null) cursor.close();
+            }
+        }
     }
 
     private static String guessMimeType(String path) {
