@@ -863,19 +863,13 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                         }
                         handleTapContact(c);
                       }}
-                      className={`no-touch-callout touch-manipulation p-2.5 rounded-xl text-xs transition flex items-center gap-2 border text-left ${
+                      className={`soft-contact-pill no-touch-callout touch-manipulation p-2.5 rounded-xl text-xs transition flex items-center gap-2 text-left ${
                         isPressing ? 'scale-[0.97] ring-2 ring-ghost-accent' : ''
-                      } ${
-                        selected
-                          ? 'bg-ghost-accent text-ghost-accentInk border-ghost-accent shadow-neonSm'
-                          : 'bg-ghost-elevated text-ghost-ink border-ghost-border/20 dark:border-ghost-border hover:border-ghost-accent'
-                      }`}
+                      } ${selected ? 'is-selected' : ''}`}
                     >
                       <span
-                        className={`w-7 h-7 rounded-lg font-mono text-[10px] font-bold flex items-center justify-center shrink-0 ${
-                          selected
-                            ? 'bg-ghost-accentInk/15 text-ghost-accentInk'
-                            : 'bg-ghost-surface text-ghost-ink'
+                        className={`soft-contact-pill-avatar w-7 h-7 rounded-lg font-mono text-[10px] font-bold flex items-center justify-center shrink-0 ${
+                          selected ? 'is-selected' : ''
                         }`}
                       >
                         {multiMode && selected ? multiOrderIdx + 1 : c.initials}

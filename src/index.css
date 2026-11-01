@@ -261,8 +261,8 @@ html.dark input[type='date']::-webkit-calendar-picker-indicator {
   margin: 18px 20px 14px;
   padding: 8px 10px;
   border-radius: 999px;
-  background: var(--bg-base);
-  box-shadow: var(--shadow-raised);
+  background: transparent;
+  box-shadow: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -403,8 +403,12 @@ button.soft-pill:active,
 }
 
 .soft-main {
-  padding: 6px 22px 116px !important;
+  padding: 0 0 116px !important;
   scrollbar-gutter: stable;
+}
+
+.soft-main-content {
+  padding: 6px 22px 0;
 }
 
 .soft-screen {
@@ -761,6 +765,27 @@ button[class*='bg-ghost-accent'] {
   box-shadow: var(--shadow-inset-sm);
 }
 
+/* Contact rows stay visually open: no surface fill behind imported contacts. */
+.soft-contact-pill {
+  background: transparent !important;
+  color: var(--text-primary) !important;
+  box-shadow: none !important;
+}
+
+.soft-contact-pill.is-selected {
+  color: var(--accent-color) !important;
+}
+
+.soft-contact-pill-avatar {
+  background: transparent !important;
+  color: var(--text-primary) !important;
+  box-shadow: none !important;
+}
+
+.soft-contact-pill-avatar.is-selected {
+  color: var(--accent-color) !important;
+}
+
 /* Contact import picker */
 .soft-contact-picker-modal {
   max-height: min(88dvh, 720px);
@@ -833,21 +858,21 @@ button[class*='bg-ghost-accent'] {
   padding: 10px 12px;
   border: 0;
   border-radius: 22px !important;
-  background: var(--bg-base) !important;
+  background: transparent !important;
   color: var(--text-primary) !important;
-  box-shadow: var(--shadow-raised-sm) !important;
+  box-shadow: none !important;
   text-align: left;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  transition: color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  transition: color 0.2s ease, transform 0.2s ease;
 }
 
 .soft-contact-picker-row:active,
 .soft-contact-picker-row.is-selected {
   color: var(--accent-color) !important;
-  box-shadow: var(--shadow-inset-sm) !important;
+  box-shadow: none !important;
 }
 
 .soft-contact-picker-row:active {
@@ -856,7 +881,7 @@ button[class*='bg-ghost-accent'] {
 
 .soft-contact-picker-row.is-saved {
   color: var(--text-secondary) !important;
-  box-shadow: var(--shadow-inset-sm) !important;
+  box-shadow: none !important;
   opacity: 0.62;
   cursor: default;
 }
@@ -866,9 +891,9 @@ button[class*='bg-ghost-accent'] {
   height: 36px;
   flex: 0 0 36px;
   border-radius: 50%;
-  background: var(--bg-base);
+  background: transparent;
   color: var(--text-primary);
-  box-shadow: var(--shadow-inset-sm);
+  box-shadow: none;
   font-size: 0.65rem;
   font-weight: 700;
   display: inline-flex;
@@ -885,9 +910,9 @@ button[class*='bg-ghost-accent'] {
   height: 25px;
   flex: 0 0 25px;
   border-radius: 50%;
-  background: var(--bg-base);
+  background: transparent;
   color: var(--text-secondary);
-  box-shadow: var(--shadow-inset-sm);
+  box-shadow: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -895,7 +920,7 @@ button[class*='bg-ghost-accent'] {
 
 .soft-contact-picker-check.is-selected {
   color: var(--accent-color);
-  box-shadow: var(--shadow-raised-sm);
+  box-shadow: none;
 }
 
 .soft-contact-picker-saved {
@@ -1043,8 +1068,8 @@ html.dark .soft-backdrop {
     margin-inline: 17px;
   }
 
-  .soft-main {
-    padding-inline: 18px !important;
+  .soft-main-content {
+    padding-inline: 18px;
   }
 
   .soft-nav-item {
