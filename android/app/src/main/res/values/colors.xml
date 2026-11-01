@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ghost_canvas">#EBEEF2</color>
+    <color name="ghost_surface">#F6F7F9</color>
+    <color name="ghost_neon_red">#FF1E38</color>
+    <color name="ghost_ink">#111318</color>
+</resources>

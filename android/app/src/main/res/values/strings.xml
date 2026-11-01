@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Ghost</string>
+    <string name="accessibility_service_label">Ghost Screen Agent</string>
+    <string name="accessibility_service_description">Allows Ghost to read app context before sending scheduled messages, tap safe UI buttons (like WhatsApp Send), enforce Red-Zone call/payment guardrails, and yield control immediately on Volume-Down.</string>
+</resources>

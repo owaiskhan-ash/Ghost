@@ -1,0 +1,35 @@
+{
+  "available": true,
+  "fileName": "Ghost-v1.1.0.apk",
+  "packageName": "ai.ghost.agent",
+  "versionName": "1.1.0",
+  "versionCode": 2,
+  "minSdk": 26,
+  "targetSdk": 34,
+  "sizeBytes": 695216,
+  "sha256": "b35612899853a085ce78c9a8d9ba87ba40d67f71eacb288d8d92d7e8786f2835",
+  "builtAt": "2026-11-01T07:01:22.247680+00:00",
+  "signatureSchemes": [
+    "APK Signature Scheme v2 (Verified)",
+    "APK Signature Scheme v3 (Verified)"
+  ],
+  "nativeClasses": [
+    "ai.ghost.agent.MainActivity",
+    "ai.ghost.agent.GhostAccessibilityService",
+    "ai.ghost.agent.GhostNativeBridge",
+    "ai.ghost.agent.GhostTaskScheduler",
+    "ai.ghost.agent.GhostTaskStore",
+    "ai.ghost.agent.GhostAlarmReceiver",
+    "ai.ghost.agent.GhostBootReceiver",
+    "ai.ghost.agent.GhostKillSwitchReceiver",
+    "ai.ghost.agent.GhostForegroundService"
+  ],
+  "permissions": [
+    "android.permission.BIND_ACCESSIBILITY_SERVICE",
+    "android.permission.SCHEDULE_EXACT_ALARM",
+    "android.permission.RECEIVE_BOOT_COMPLETED",
+    "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+    "android.permission.SYSTEM_ALERT_WINDOW",
+    "android.permission.READ_CONTACTS"
+  ]
+}
