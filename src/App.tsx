@@ -43,8 +43,8 @@ import { CommandDeck } from './components/CommandDeck';
 import { QueueView } from './components/QueueView';
 import { SetupView } from './components/SetupView';
 import { LiveScreenStage } from './components/LiveScreenStage';
-import ghostLogoLight from '../ghost-soft-ui-logo.png';
-import ghostLogoDark from '../ghost-soft-ui-logo-dark.png';
+import ghostLogoLight from './assets/ghost-header-logo-light.png';
+import ghostLogoDark from './assets/ghost-header-logo-dark.png';
 
 type ActiveTab = 'new' | 'scheduled' | 'settings';
 
