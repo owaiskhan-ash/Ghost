@@ -2,14 +2,14 @@ package ai.ghost.agent;
 
 import android.Manifest;
 import android.app.AlarmManager;
+import android.app.KeyguardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
-import android.provider.ContactsContract;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.webkit.JavascriptInterface;
 
@@ -75,6 +75,23 @@ public class GhostNativeBridge {
             }
             obj.put("exactAlarmAllowed", alarmOk);
 
+            PowerManager powerMgr = (PowerManager) activity.getSystemService(Context.POWER_SERVICE);
+            boolean batteryUnrestricted = true;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && powerMgr != null) {
+                batteryUnrestricted = powerMgr.isIgnoringBatteryOptimizations(activity.getPackageName());
+            }
+            obj.put("batteryUnrestricted", batteryUnrestricted);
+
+            boolean overlayOk = true;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                overlayOk = Settings.canDrawOverlays(activity);
+            }
+            obj.put("overlayAllowed", overlayOk);
+
+            KeyguardManager km = (KeyguardManager) activity.getSystemService(Context.KEYGUARD_SERVICE);
+            boolean screenLockSecure = km != null && km.isDeviceSecure();
+            obj.put("screenLockSecure", screenLockSecure);
+
             PackageManager pm = activity.getPackageManager();
             boolean waMain = GhostTaskScheduler.isPackageInstalled(pm, "com.whatsapp");
             boolean waBiz = GhostTaskScheduler.isPackageInstalled(pm, "com.whatsapp.w4b");
@@ -103,6 +120,11 @@ public class GhostNativeBridge {
     @JavascriptInterface
     public void pickPhoneContact() {
         activity.launchSystemContactPicker();
+    }
+
+    @JavascriptInterface
+    public void requestBulkPhoneContacts() {
+        activity.requestBulkContactsFromPhone();
     }
 
     @JavascriptInterface
@@ -140,6 +162,11 @@ public class GhostNativeBridge {
     }
 
     @JavascriptInterface
+    public String getNativeTasksJson() {
+        return GhostTaskStore.getTasks(activity).toString();
+    }
+
+    @JavascriptInterface
     public String getNativeReceiptsJson() {
         return GhostTaskStore.getReceipts(activity).toString();
     }
@@ -172,51 +199,67 @@ public class GhostNativeBridge {
     @JavascriptInterface
     public void openExactAlarmSettings() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
-            intent.setData(Uri.parse("package:" + activity.getPackageName()));
+            try {
+                Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
+                intent.setData(Uri.parse("package:" + activity.getPackageName()));
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                activity.startActivity(intent);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    @JavascriptInterface
+    public void openBatteryOptimizationSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                Intent direct = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                direct.setData(Uri.parse("package:" + activity.getPackageName()));
+                direct.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                activity.startActivity(direct);
+                return;
+            } catch (Exception ignored) {
+            }
+            try {
+                Intent fallback = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                activity.startActivity(fallback);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    @JavascriptInterface
+    public void openOverlaySettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                Intent intent = new Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:" + activity.getPackageName())
+                );
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                activity.startActivity(intent);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    @JavascriptInterface
+    public void openSecurityLockSettings() {
+        try {
+            Intent intent = new Intent(Settings.ACTION_SECURITY_SETTINGS);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             activity.startActivity(intent);
+        } catch (Exception ignored) {
         }
     }
 
     @JavascriptInterface
     public String getDeviceContactsJson() {
-        JSONArray arr = new JSONArray();
         if (activity.checkSelfPermission(Manifest.permission.READ_CONTACTS)
                 != PackageManager.PERMISSION_GRANTED) {
-            return arr.toString();
+            return "[]";
         }
-
-        Cursor cursor = null;
-        try {
-            cursor = activity.getContentResolver().query(
-                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                    new String[]{
-                            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-                            ContactsContract.CommonDataKinds.Phone.NUMBER
-                    },
-                    null,
-                    null,
-                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
-            );
-            if (cursor != null) {
-                int count = 0;
-                while (cursor.moveToNext() && count < 100) {
-                    String name = cursor.getString(0);
-                    String num = cursor.getString(1);
-                    if (name != null && num != null) {
-                        JSONObject item = new JSONObject();
-                        item.put("name", name);
-                        item.put("phone", num.replaceAll("\\s+", ""));
-                        arr.put(item);
-                        count++;
-                    }
-                }
-            }
-        } catch (Exception ignored) {
-        } finally {
-            if (cursor != null) cursor.close();
-        }
-        return arr.toString();
+        return activity.queryAllPhoneContactsJson().toString();
     }
 }

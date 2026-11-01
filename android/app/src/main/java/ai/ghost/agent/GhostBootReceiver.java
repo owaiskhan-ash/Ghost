@@ -7,11 +7,10 @@ import android.content.Intent;
 public class GhostBootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (intent == null || intent.getAction() == null) return;
-        String action = intent.getAction();
-        if (Intent.ACTION_BOOT_COMPLETED.equals(action)
-                || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) {
-            GhostTaskScheduler.rescheduleAllEnabledTasks(context);
+        if (context == null || intent == null || intent.getAction() == null) return;
+        try {
+            GhostTaskScheduler.rescheduleAllEnabledTasks(context.getApplicationContext());
+        } catch (Throwable ignored) {
         }
     }
 }

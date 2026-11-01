@@ -1,18 +1,20 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
   BookmarkPlus,
-  BookUser,
   Calendar,
   Check,
   Clock,
+  Download,
   Layers,
   Pencil,
   Play,
   Plus,
   Repeat,
+  Search,
   Send,
   Star,
   Trash2,
+  Upload,
   Users,
   X,
   Zap,
@@ -27,14 +29,16 @@ import type {
   TargetWhatsApp,
 } from '../types/ghost';
 import {
-  computeTriggerMillis,
+  computeNextTaskTrigger,
   formatTime12h,
   getTodayOrTomorrowDate,
+  hasDynamicVariables,
   makeInitials,
+  resolveMessageVariables,
 } from '../data/seedData';
 import {
+  fetchPhoneContactsForBulkImport,
   isRunningInNativeApk,
-  launchNativeContactPicker,
 } from '../bridge/nativeBridge';
 
 interface CommandDeckProps {
@@ -42,6 +46,7 @@ interface CommandDeckProps {
   groups: ContactGroup[];
   templates: QuickTemplate[];
   onAddContact: (c: SavedContact) => void;
+  onBulkAddContacts: (items: SavedContact[]) => void;
   onToggleFavouriteContact: (id: string) => void;
   onEditContact: (id: string, name: string, phone: string) => void;
   onDeleteContact: (id: string) => void;
@@ -63,6 +68,81 @@ function addMinutesFromNow(mins: number): { date: string; time24: string } {
   return { date: `${yyyy}-${mo}-${dd}`, time24: `${hh}:${mm}` };
 }
 
+function normalizeDigitsKey(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
+function parseVcfOrBulkLines(raw: string): SavedContact[] {
+  const results: SavedContact[] = [];
+  const seen = new Set<string>();
+
+  if (/BEGIN:VCARD/i.test(raw)) {
+    const cards = raw.split(/END:VCARD/i);
+    cards.forEach((card, idx) => {
+      const fnMatch = card.match(/^FN[^:]*:(.+)$/im);
+      const telMatch = card.match(/^TEL[^:]*:(.+)$/im);
+      if (telMatch) {
+        const cleanPhone = telMatch[1].trim().replace(/[^\d+]/g, '');
+        const key = normalizeDigitsKey(cleanPhone);
+        if (key.length >= 5 && !seen.has(key)) {
+          seen.add(key);
+          const name = (fnMatch?.[1]?.trim() || cleanPhone).replace(/\\,/g, ',');
+          results.push({
+            id: `c-vcf-${Date.now()}-${idx}`,
+            name,
+            phone: cleanPhone,
+            initials: makeInitials(name),
+          });
+        }
+      }
+    });
+    return results;
+  }
+
+  const lines = raw.split(/\r?\n/);
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    const parts = trimmed.split(/[,;\t|]+/);
+    let name = '';
+    let phone = '';
+    if (parts.length >= 2) {
+      name = parts[0].trim();
+      phone = parts.slice(1).join('').replace(/[^\d+]/g, '');
+    } else {
+      const match = trimmed.match(/^(.*?)\s*([+\d][\d\s()-]{4,})$/);
+      if (match) {
+        name = match[1].trim();
+        phone = match[2].replace(/[^\d+]/g, '');
+      }
+    }
+    const key = normalizeDigitsKey(phone);
+    if (key.length >= 5 && !seen.has(key)) {
+      seen.add(key);
+      const finalName = name || phone;
+      results.push({
+        id: `c-paste-${Date.now()}-${idx}`,
+        name: finalName,
+        phone,
+        initials: makeInitials(finalName),
+      });
+    }
+  });
+  return results;
+}
+
+const WEEKDAY_PILLS = [
+  { idx: 0, short: 'S', label: 'Sun' },
+  { idx: 1, short: 'M', label: 'Mon' },
+  { idx: 2, short: 'T', label: 'Tue' },
+  { idx: 3, short: 'W', label: 'Wed' },
+  { idx: 4, short: 'T', label: 'Thu' },
+  { idx: 5, short: 'F', label: 'Fri' },
+  { idx: 6, short: 'S', label: 'Sat' },
+] as const;
+
+const DYNAMIC_TOKENS = ['{name}', '{date}', '{day}'] as const;
 const LONG_PRESS_MS = 420;
 
 export const CommandDeck: React.FC<CommandDeckProps> = ({
@@ -70,6 +150,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
   groups,
   templates,
   onAddContact,
+  onBulkAddContacts,
   onToggleFavouriteContact,
   onEditContact,
   onDeleteContact,
@@ -82,6 +163,8 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
 }) => {
   const nativeMode = isRunningInNativeApk();
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const templateInputRef = useRef<HTMLInputElement | null>(null);
+  const vcfInputRef = useRef<HTMLInputElement | null>(null);
 
   const sortedContacts = useMemo(() => {
     const favs = contacts.filter((c) => c.isFavourite);
@@ -98,6 +181,15 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
   const [selectedMultiIds, setSelectedMultiIds] = useState<string[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string>('');
 
+  // Bulk Import Phone Contacts (Multi-Select Picker) state
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkPermissionDenied, setBulkPermissionDenied] = useState(false);
+  const [bulkCandidates, setBulkCandidates] = useState<SavedContact[]>([]);
+  const [bulkSelectedPhones, setBulkSelectedPhones] = useState<string[]>([]);
+  const [bulkSearch, setBulkSearch] = useState('');
+  const [bulkPasteText, setBulkPasteText] = useState('');
+
   // Message & Quick Templates state
   const [messageMode, setMessageMode] = useState<'same' | 'custom'>('same');
   const [messageBody, setMessageBody] = useState('');
@@ -109,10 +201,18 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
   const [newTplText, setNewTplText] = useState('');
   const [templateSavedToast, setTemplateSavedToast] = useState(false);
 
-  // Schedule Time & App state
+  // Schedule Time, Custom Recurrence & App state
   const [time24, setTime24] = useState('09:00');
   const [dateStr, setDateStr] = useState(() => getTodayOrTomorrowDate('09:00'));
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('once');
+  const [repeatDays, setRepeatDays] = useState<number[]>(() => [
+    new Date().getDay(),
+  ]);
+  const [repeatMonthDay, setRepeatMonthDay] = useState<number>(() =>
+    new Date().getDate()
+  );
+  const [repeatIntervalDays, setRepeatIntervalDays] = useState<number>(3);
+
   const [whatsappPackage, setWhatsappPackage] =
     useState<TargetWhatsApp>('com.whatsapp');
   const [scheduledToast, setScheduledToast] = useState(false);
@@ -123,7 +223,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('+');
 
-  // Create / Edit Broadcast Group inline/modal state
+  // Create Broadcast Group inline form
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [groupNameInput, setGroupNameInput] = useState('');
   const [groupMemberIds, setGroupMemberIds] = useState<string[]>([]);
@@ -144,6 +244,21 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const didLongPressRef = useRef(false);
+
+  const existingPhoneKeys = useMemo(
+    () => new Set(contacts.map((c) => normalizeDigitsKey(c.phone))),
+    [contacts]
+  );
+
+  const filteredBulkCandidates = useMemo(() => {
+    const q = bulkSearch.trim().toLowerCase();
+    if (!q) return bulkCandidates;
+    return bulkCandidates.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.phone.toLowerCase().includes(q)
+    );
+  }, [bulkCandidates, bulkSearch]);
 
   const menuContact = useMemo(
     () => contacts.find((c) => c.id === menuContactId) || null,
@@ -183,7 +298,6 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
       .filter((c): c is SavedContact => Boolean(c));
   }, [activeGroup, contacts]);
 
-  // Effective recipients list across Single, Multi, or Broadcast Group
   const effectiveBatchContacts: SavedContact[] = useMemo(() => {
     if (recipientTab === 'groups') {
       return activeGroupContacts;
@@ -201,6 +315,9 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
   ]);
 
   const isMultiBatch = effectiveBatchContacts.length > 1;
+
+  const previewSampleName =
+    effectiveBatchContacts[0]?.name || 'Contact';
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
@@ -331,6 +448,113 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
     }
   };
 
+  const toggleRepeatWeekday = (dayIdx: number) => {
+    setRepeatDays((prev) => {
+      if (prev.includes(dayIdx)) {
+        if (prev.length <= 1) return prev;
+        return prev.filter((d) => d !== dayIdx);
+      }
+      return [...prev, dayIdx].sort((a, b) => a - b);
+    });
+  };
+
+  // Open Multi-Select Bulk Contact Picker
+  const handleOpenBulkImport = async () => {
+    setBulkPermissionDenied(false);
+    setBulkSearch('');
+    setBulkSelectedPhones([]);
+    setShowBulkModal(true);
+    setBulkLoading(true);
+
+    const mode = await fetchPhoneContactsForBulkImport(
+      (loaded) => {
+        setBulkLoading(false);
+        if (loaded.length > 0) {
+          setBulkCandidates(loaded);
+          // Pre-select nothing if coming from full phone book, or pre-select all if returned from Web Contact Picker
+        }
+      },
+      () => {
+        setBulkLoading(false);
+        setBulkPermissionDenied(true);
+      }
+    );
+
+    if (mode === 'web_picker') {
+      setBulkLoading(false);
+    }
+  };
+
+  const toggleBulkCandidate = (phone: string) => {
+    setBulkSelectedPhones((prev) =>
+      prev.includes(phone) ? prev.filter((p) => p !== phone) : [...prev, phone]
+    );
+  };
+
+  const toggleBulkSelectAllVisible = () => {
+    const unsavedVisible = filteredBulkCandidates.filter(
+      (c) => !existingPhoneKeys.has(normalizeDigitsKey(c.phone))
+    );
+    const allSelected =
+      unsavedVisible.length > 0 &&
+      unsavedVisible.every((c) => bulkSelectedPhones.includes(c.phone));
+
+    if (allSelected) {
+      const visibleSet = new Set(unsavedVisible.map((c) => c.phone));
+      setBulkSelectedPhones((prev) => prev.filter((p) => !visibleSet.has(p)));
+    } else {
+      const next = new Set(bulkSelectedPhones);
+      unsavedVisible.forEach((c) => next.add(c.phone));
+      setBulkSelectedPhones(Array.from(next));
+    }
+  };
+
+  const handleLoadBulkTextOrVcf = (raw: string) => {
+    const parsed = parseVcfOrBulkLines(raw);
+    if (parsed.length === 0) return;
+    setBulkCandidates((prev) => {
+      const map = new Map<string, SavedContact>();
+      for (const item of [...parsed, ...prev]) {
+        map.set(normalizeDigitsKey(item.phone), item);
+      }
+      return Array.from(map.values());
+    });
+    const autoSelect = parsed
+      .filter((c) => !existingPhoneKeys.has(normalizeDigitsKey(c.phone)))
+      .map((c) => c.phone);
+    setBulkSelectedPhones((prev) =>
+      Array.from(new Set([...prev, ...autoSelect]))
+    );
+    setBulkPasteText('');
+  };
+
+  const handleVcfFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        handleLoadBulkTextOrVcf(reader.result);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleConfirmBulkImport = () => {
+    const selectedItems = bulkCandidates.filter((c) =>
+      bulkSelectedPhones.includes(c.phone)
+    );
+    if (selectedItems.length === 0) return;
+    onBulkAddContacts(selectedItems);
+    if (!selectedContactId && selectedItems[0]) {
+      setSelectedContactId(selectedItems[0].id);
+    }
+    setShowBulkModal(false);
+    setBulkSelectedPhones([]);
+    setValidationHint(null);
+  };
+
   const handleSaveContact = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim() || !newPhone.trim()) return;
@@ -393,20 +617,32 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
     setEditingGroupInSheet(false);
   };
 
-  const handlePickNativeContact = () => {
-    const ok = launchNativeContactPicker((picked) => {
-      onAddContact(picked);
-      setSelectedContactId(picked.id);
-      if (multiMode) {
-        setSelectedMultiIds((prev) =>
-          prev.includes(picked.id) ? prev : [...prev, picked.id]
-        );
-      }
-      setValidationHint(null);
-    });
-    if (!ok) {
-      setRecipientTab('contacts');
-      setShowAddContact(true);
+  const insertDynamicToken = (token: string) => {
+    setValidationHint(null);
+    if (showAddTemplate && document.activeElement === templateInputRef.current) {
+      setNewTplText((prev) =>
+        prev && !prev.endsWith(' ') ? `${prev} ${token}` : `${prev}${token}`
+      );
+      templateInputRef.current?.focus();
+      return;
+    }
+
+    const el = messageInputRef.current;
+    if (el) {
+      const start = el.selectionStart ?? messageBody.length;
+      const end = el.selectionEnd ?? messageBody.length;
+      const next =
+        messageBody.slice(0, start) + token + messageBody.slice(end);
+      setMessageBody(next);
+      requestAnimationFrame(() => {
+        el.focus();
+        const cursor = start + token.length;
+        el.setSelectionRange(cursor, cursor);
+      });
+    } else {
+      setMessageBody((prev) =>
+        prev && !prev.endsWith(' ') ? `${prev} ${token}` : `${prev}${token}`
+      );
     }
   };
 
@@ -474,17 +710,26 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
         if (contacts.length === 0) {
           setRecipientTab('contacts');
           setShowAddContact(true);
-          setValidationHint('Add a contact first to schedule messages');
+          setValidationHint('Add or import contacts first');
         } else {
           setShowCreateGroup(true);
           setValidationHint('Create or select a broadcast group');
         }
       } else {
         setShowAddContact(true);
-        setValidationHint('Add a contact first');
+        setValidationHint('Add or import a contact first');
       }
       return null;
     }
+
+    const computedNext = computeNextTaskTrigger({
+      scheduledDate: dateStr,
+      scheduledTime24: time24,
+      repeatMode,
+      repeatDays,
+      repeatMonthDay,
+      repeatIntervalDays,
+    });
 
     if (effectiveBatchContacts.length === 1) {
       const target = effectiveBatchContacts[0];
@@ -512,15 +757,18 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             : undefined,
         messageBody: text,
         scheduledTime24: time24,
-        scheduledDate: dateStr,
-        triggerAtMillis: computeTriggerMillis(dateStr, time24),
+        scheduledDate: computedNext.nextDateStr,
+        triggerAtMillis: computedNext.triggerAtMillis,
         repeatMode,
+        repeatDays: repeatMode === 'weekly' ? repeatDays : undefined,
+        repeatMonthDay: repeatMode === 'monthly' ? repeatMonthDay : undefined,
+        repeatIntervalDays:
+          repeatMode === 'interval' ? repeatIntervalDays : undefined,
         whatsappPackage,
         enabled: true,
       };
     }
 
-    // Multi-Contact or Broadcast Group
     const sharedText = messageBody.trim();
     if (messageMode === 'same' && !sharedText) {
       setValidationHint('Enter a broadcast message or tap a quick template');
@@ -574,9 +822,13 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
           : `${recipients.length} custom messages`,
       recipients,
       scheduledTime24: time24,
-      scheduledDate: dateStr,
-      triggerAtMillis: computeTriggerMillis(dateStr, time24),
+      scheduledDate: computedNext.nextDateStr,
+      triggerAtMillis: computedNext.triggerAtMillis,
       repeatMode,
+      repeatDays: repeatMode === 'weekly' ? repeatDays : undefined,
+      repeatMonthDay: repeatMode === 'monthly' ? repeatMonthDay : undefined,
+      repeatIntervalDays:
+        repeatMode === 'interval' ? repeatIntervalDays : undefined,
       whatsappPackage,
       enabled: true,
     };
@@ -607,10 +859,9 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
 
   return (
     <div className="grid grid-cols-12 gap-2.5">
-      {/* BENTO TILE 1 (12 cols): Contacts & Broadcast Groups */}
+      {/* BENTO TILE 1 (12 cols): Contacts, Bulk Import & Broadcast Groups */}
       <section className="col-span-12 bento-card p-3.5 space-y-2.5">
         <div className="flex items-center justify-between gap-2">
-          {/* Contacts vs Broadcast Groups Switcher */}
           <div className="flex items-center gap-1 bg-ghost-elevated p-0.5 rounded-xl">
             <button
               type="button"
@@ -643,7 +894,6 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             </button>
           </div>
 
-          {/* Right Toolbar */}
           <div className="flex items-center gap-1.5 shrink-0">
             {recipientTab === 'contacts' && sortedContacts.length > 1 && (
               <button
@@ -651,8 +901,8 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                 onClick={toggleMultiMode}
                 className={
                   multiMode
-                    ? 'btn-solid px-2.5 py-1 text-[11px] rounded-lg'
-                    : 'btn-outline px-2.5 py-1 text-[11px] rounded-lg'
+                    ? 'btn-solid px-2 py-1 text-[11px] rounded-lg'
+                    : 'btn-outline px-2 py-1 text-[11px] rounded-lg'
                 }
               >
                 <Users className="w-3 h-3" />
@@ -660,14 +910,15 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
               </button>
             )}
 
-            {recipientTab === 'contacts' && nativeMode && (
+            {recipientTab === 'contacts' && (
               <button
                 type="button"
-                onClick={handlePickNativeContact}
+                onClick={handleOpenBulkImport}
                 className="btn-outline px-2.5 py-1 text-[11px] rounded-lg"
+                title="Bulk Import Phone Contacts"
               >
-                <BookUser className="w-3 h-3" />
-                Book
+                <Download className="w-3 h-3" />
+                Import
               </button>
             )}
 
@@ -733,7 +984,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             )}
 
             {sortedContacts.length > 0 && (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-0.5">
                 {sortedContacts.map((c) => {
                   const multiOrderIdx = activeMultiContacts.findIndex(
                     (mc) => mc.id === c.id
@@ -819,17 +1070,14 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             {contacts.length === 0 ? (
               <div className="p-3 bg-ghost-elevated rounded-xl flex items-center justify-between gap-2 text-xs">
                 <span className="text-ghost-secondary">
-                  Save contacts first to build a broadcast list.
+                  Import or add contacts first.
                 </span>
                 <button
                   type="button"
-                  onClick={() => {
-                    setRecipientTab('contacts');
-                    setShowAddContact(true);
-                  }}
+                  onClick={handleOpenBulkImport}
                   className="btn-solid px-3 py-1.5 rounded-lg shrink-0"
                 >
-                  Add Contact
+                  Import Contacts
                 </button>
               </div>
             ) : (
@@ -858,7 +1106,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                       </button>
                     </div>
 
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto">
                       {sortedContacts.map((c) => {
                         const checked = groupMemberIds.includes(c.id);
                         return (
@@ -1060,61 +1308,153 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             type="date"
             value={dateStr}
             onChange={(e) => setDateStr(e.target.value)}
-            disabled={repeatMode === 'daily'}
+            disabled={
+              repeatMode === 'daily' ||
+              repeatMode === 'weekly' ||
+              repeatMode === 'monthly'
+            }
             className="w-full bg-transparent text-[11px] font-mono font-medium text-ghost-ink focus:outline-none disabled:opacity-40"
           />
         </div>
       </section>
 
-      {/* BENTO TILE 3 (5 cols): App Target + Repeat Bento Tile */}
+      {/* BENTO TILE 3 (5 cols): App Target */}
       <section className="col-span-5 bento-card p-3.5 flex flex-col justify-between gap-2.5">
-        <div className="space-y-1.5">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-ghost-secondary block">
-            App
+        <span className="text-[11px] font-bold uppercase tracking-wider text-ghost-secondary block">
+          App
+        </span>
+        <div className="grid grid-cols-1 gap-2 my-auto">
+          <button
+            type="button"
+            onClick={() => setWhatsappPackage('com.whatsapp')}
+            className={
+              whatsappPackage === 'com.whatsapp'
+                ? 'btn-solid py-2.5 text-xs rounded-xl'
+                : 'btn-outline py-2.5 text-xs rounded-xl'
+            }
+          >
+            WhatsApp
+          </button>
+          <button
+            type="button"
+            onClick={() => setWhatsappPackage('com.whatsapp.w4b')}
+            className={
+              whatsappPackage === 'com.whatsapp.w4b'
+                ? 'btn-solid py-2.5 text-xs rounded-xl'
+                : 'btn-outline py-2.5 text-xs rounded-xl'
+            }
+          >
+            WA Business
+          </button>
+        </div>
+      </section>
+
+      {/* BENTO TILE 4 (12 cols): Custom Recurring Schedule Selector */}
+      <section className="col-span-12 bento-card p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-ghost-secondary flex items-center gap-1 shrink-0">
+            <Repeat className="w-3 h-3 text-ghost-accent" /> Schedule
           </span>
-          <div className="grid grid-cols-1 gap-1.5">
-            <button
-              type="button"
-              onClick={() => setWhatsappPackage('com.whatsapp')}
-              className={
-                whatsappPackage === 'com.whatsapp'
-                  ? 'btn-solid py-1.5 text-[11px] rounded-lg'
-                  : 'btn-outline py-1.5 text-[11px] rounded-lg'
-              }
-            >
-              WhatsApp
-            </button>
-            <button
-              type="button"
-              onClick={() => setWhatsappPackage('com.whatsapp.w4b')}
-              className={
-                whatsappPackage === 'com.whatsapp.w4b'
-                  ? 'btn-solid py-1.5 text-[11px] rounded-lg'
-                  : 'btn-outline py-1.5 text-[11px] rounded-lg'
-              }
-            >
-              WA Business
-            </button>
+
+          <div className="flex items-center gap-1 overflow-x-auto">
+            {(
+              [
+                { id: 'once', label: 'Once' },
+                { id: 'daily', label: 'Daily' },
+                { id: 'weekly', label: 'Weekly' },
+                { id: 'monthly', label: 'Monthly' },
+                { id: 'interval', label: 'Custom' },
+              ] as const
+            ).map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setRepeatMode(m.id)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition shrink-0 ${
+                  repeatMode === m.id
+                    ? 'bg-ghost-accent text-ghost-accentInk shadow-neonSm'
+                    : 'bg-ghost-elevated text-ghost-secondary hover:text-ghost-ink'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() =>
-            setRepeatMode((m) => (m === 'once' ? 'daily' : 'once'))
-          }
-          className={
-            repeatMode === 'daily'
-              ? 'btn-solid py-2 text-[11px] rounded-xl w-full'
-              : 'btn-outline py-2 text-[11px] rounded-xl w-full'
-          }
-        >
-          <Repeat className="w-3 h-3" />
-          {repeatMode === 'daily' ? 'Daily' : 'Once'}
-        </button>
+        {/* Weekly Weekday Picker */}
+        {repeatMode === 'weekly' && (
+          <div className="grid grid-cols-7 gap-1.5 pt-0.5">
+            {WEEKDAY_PILLS.map((d) => {
+              const active = repeatDays.includes(d.idx);
+              return (
+                <button
+                  key={d.idx}
+                  type="button"
+                  title={d.label}
+                  onClick={() => toggleRepeatWeekday(d.idx)}
+                  className={`py-1.5 rounded-xl font-mono text-xs font-bold border transition ${
+                    active
+                      ? 'bg-ghost-accent text-ghost-accentInk border-ghost-accent shadow-neonSm'
+                      : 'bg-ghost-elevated text-ghost-secondary border-transparent hover:border-ghost-accent'
+                  }`}
+                >
+                  {d.short}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Monthly Day-of-Month Picker */}
+        {repeatMode === 'monthly' && (
+          <div className="flex items-center justify-between bg-ghost-elevated rounded-xl px-3 py-1.5">
+            <span className="text-xs font-medium text-ghost-secondary">
+              Send every month on day
+            </span>
+            <select
+              aria-label="Day of month"
+              value={repeatMonthDay}
+              onChange={(e) => setRepeatMonthDay(Number(e.target.value))}
+              className="bento-input px-2.5 py-1 font-mono text-xs font-bold cursor-pointer"
+            >
+              {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                <option key={d} value={d}>
+                  Day {d}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Custom Every N Days Picker */}
+        {repeatMode === 'interval' && (
+          <div className="flex items-center justify-between bg-ghost-elevated rounded-xl px-3 py-1.5">
+            <span className="text-xs font-medium text-ghost-secondary">
+              Repeat every
+            </span>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={2}
+                max={365}
+                value={repeatIntervalDays}
+                onChange={(e) =>
+                  setRepeatIntervalDays(
+                    Math.min(365, Math.max(2, Number(e.target.value) || 2))
+                  )
+                }
+                className="bento-input w-16 px-2 py-1 text-center font-mono text-xs font-bold"
+              />
+              <span className="text-xs font-mono font-semibold text-ghost-ink">
+                days
+              </span>
+            </div>
+          </div>
+        )}
       </section>
 
-      {/* BENTO TILE 4 (12 cols): Quick Templates + Message Composer & Dispatch */}
+      {/* BENTO TILE 5 (12 cols): Quick Templates, Dynamic Variables & Composer */}
       <section className="col-span-12 bento-card p-3.5 space-y-2.5">
         <div className="flex items-center justify-between gap-2">
           <span className="text-[11px] font-bold uppercase tracking-wider text-ghost-secondary">
@@ -1171,6 +1511,20 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
           </div>
         </div>
 
+        {/* Dynamic Variable Chips ({name}, {date}, {day}) */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {DYNAMIC_TOKENS.map((tok) => (
+            <button
+              key={tok}
+              type="button"
+              onClick={() => insertDynamicToken(tok)}
+              className="px-2 py-0.5 rounded-lg bg-ghost-elevated hover:bg-ghost-accent hover:text-ghost-accentInk text-[10px] font-mono font-bold text-ghost-secondary border border-ghost-border/20 dark:border-ghost-border transition"
+            >
+              + {tok}
+            </button>
+          ))}
+        </div>
+
         {/* Inline Quick Template Creator */}
         {showAddTemplate && (
           <form
@@ -1185,8 +1539,9 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
               className="bento-input sm:w-28 px-2.5 py-1.5 text-xs"
             />
             <input
+              ref={templateInputRef}
               type="text"
-              placeholder="Template text…"
+              placeholder="Template text… e.g. Hi {name}"
               value={newTplText}
               onChange={(e) => setNewTplText(e.target.value)}
               className="bento-input flex-1 px-2.5 py-1.5 text-xs"
@@ -1256,23 +1611,37 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             ))}
           </div>
         ) : (
-          <textarea
-            ref={messageInputRef}
-            rows={2}
-            value={messageBody}
-            onChange={(e) => {
-              setValidationHint(null);
-              setMessageBody(e.target.value);
-            }}
-            placeholder={
-              recipientTab === 'groups' && activeGroup
-                ? `Broadcast message to ${activeGroup.name}…`
-                : isMultiBatch
-                  ? `Message for ${effectiveBatchContacts.length} contacts…`
-                  : 'Write message…'
-            }
-            className="bento-input w-full px-3 py-2.5 text-sm font-medium placeholder:text-ghost-muted resize-none"
-          />
+          <>
+            <textarea
+              ref={messageInputRef}
+              rows={2}
+              value={messageBody}
+              onChange={(e) => {
+                setValidationHint(null);
+                setMessageBody(e.target.value);
+              }}
+              placeholder={
+                recipientTab === 'groups' && activeGroup
+                  ? `Broadcast to ${activeGroup.name}… (supports {name}, {date}, {day})`
+                  : isMultiBatch
+                    ? `Message for ${effectiveBatchContacts.length} contacts…`
+                    : 'Write message…'
+              }
+              className="bento-input w-full px-3 py-2.5 text-sm font-medium placeholder:text-ghost-muted resize-none"
+            />
+
+            {/* Minimal Live Variable Preview ONLY when {name}/{date}/{day} is used */}
+            {hasDynamicVariables(messageBody) && (
+              <div className="px-2.5 py-1.5 rounded-xl bg-ghost-elevated text-[11px] text-ghost-secondary flex items-center gap-1.5 truncate">
+                <span className="font-mono font-bold text-ghost-accent shrink-0">
+                  →
+                </span>
+                <span className="truncate">
+                  {resolveMessageVariables(messageBody, previewSampleName)}
+                </span>
+              </div>
+            )}
+          </>
         )}
 
         {validationHint && (
@@ -1314,6 +1683,195 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
           </button>
         </div>
       </section>
+
+      {/* BULK IMPORT PHONE CONTACTS (MULTI-SELECT PICKER) MODAL */}
+      {showBulkModal && (
+        <div
+          onClick={() => setShowBulkModal(false)}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-3"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm bento-card shadow-2xl p-4 flex flex-col gap-3 max-h-[85vh]"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-ghost-border/25 dark:border-ghost-border">
+              <div>
+                <div className="text-sm font-bold text-ghost-ink">
+                  Bulk Import Contacts
+                </div>
+                <div className="text-[11px] text-ghost-muted">
+                  Select multiple phone contacts at once
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBulkModal(false)}
+                className="btn-outline p-1.5 rounded-lg"
+                aria-label="Close bulk import"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {bulkLoading ? (
+              <div className="py-10 text-center text-xs font-mono text-ghost-secondary">
+                Reading phone contacts…
+              </div>
+            ) : bulkCandidates.length > 0 ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <div className="bento-input flex-1 px-2.5 py-1.5 flex items-center gap-1.5">
+                    <Search className="w-3.5 h-3.5 text-ghost-muted shrink-0" />
+                    <input
+                      type="text"
+                      placeholder="Search contacts…"
+                      value={bulkSearch}
+                      onChange={(e) => setBulkSearch(e.target.value)}
+                      className="w-full bg-transparent text-xs text-ghost-ink focus:outline-none"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={toggleBulkSelectAllVisible}
+                    className="btn-outline px-2.5 py-1.5 text-[11px] rounded-xl shrink-0"
+                  >
+                    Select All
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5 min-h-[160px] max-h-[300px]">
+                  {filteredBulkCandidates.map((c) => {
+                    const alreadySaved = existingPhoneKeys.has(
+                      normalizeDigitsKey(c.phone)
+                    );
+                    const checked = bulkSelectedPhones.includes(c.phone);
+
+                    return (
+                      <button
+                        key={`${c.id}-${c.phone}`}
+                        type="button"
+                        disabled={alreadySaved}
+                        onClick={() => toggleBulkCandidate(c.phone)}
+                        className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between gap-2 transition ${
+                          alreadySaved
+                            ? 'bg-ghost-elevated/40 border-transparent opacity-55 cursor-default'
+                            : checked
+                              ? 'bg-ghost-accent text-ghost-accentInk border-ghost-accent'
+                              : 'bg-ghost-elevated text-ghost-ink border-ghost-border/20 dark:border-ghost-border'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span
+                            className={`w-7 h-7 rounded-lg font-mono text-[10px] font-bold flex items-center justify-center shrink-0 ${
+                              checked
+                                ? 'bg-ghost-accentInk/15 text-ghost-accentInk'
+                                : 'bg-ghost-surface text-ghost-ink'
+                            }`}
+                          >
+                            {c.initials}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold truncate">
+                              {c.name}
+                            </div>
+                            <div
+                              className={`text-[10px] font-mono truncate ${
+                                checked ? 'opacity-80' : 'text-ghost-muted'
+                              }`}
+                            >
+                              {c.phone}
+                            </div>
+                          </div>
+                        </div>
+
+                        {alreadySaved ? (
+                          <span className="text-[10px] font-mono font-bold text-ghost-muted shrink-0">
+                            Saved
+                          </span>
+                        ) : (
+                          <span
+                            className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
+                              checked
+                                ? 'bg-ghost-accentInk text-ghost-accent border-ghost-accentInk'
+                                : 'border-ghost-muted/50'
+                            }`}
+                          >
+                            {checked && <Check className="w-3.5 h-3.5" />}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="space-y-2.5">
+                {bulkPermissionDenied && (
+                  <div className="p-2.5 rounded-xl bg-ghost-elevated text-[11px] text-ghost-accent font-medium">
+                    Contacts permission was denied. Allow Contacts access or
+                    upload a .vcf / paste below.
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-ghost-secondary font-medium">
+                    Paste lines (`Name, +Phone`) or upload `.vcf`
+                  </span>
+                  <input
+                    ref={vcfInputRef}
+                    type="file"
+                    accept=".vcf,text/vcard,text/csv,text/plain"
+                    onChange={handleVcfFileUpload}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => vcfInputRef.current?.click()}
+                    className="btn-outline px-2.5 py-1 text-[11px] rounded-lg shrink-0"
+                  >
+                    <Upload className="w-3 h-3" /> .vcf / CSV
+                  </button>
+                </div>
+
+                <textarea
+                  rows={4}
+                  value={bulkPasteText}
+                  onChange={(e) => setBulkPasteText(e.target.value)}
+                  placeholder={'Rahul, +919800000001\nPriya, +919800000002'}
+                  className="bento-input w-full px-3 py-2 text-xs font-mono resize-none"
+                />
+
+                <button
+                  type="button"
+                  disabled={!bulkPasteText.trim()}
+                  onClick={() => handleLoadBulkTextOrVcf(bulkPasteText)}
+                  className="btn-outline w-full py-2 text-xs disabled:opacity-40"
+                >
+                  Load Into Picker
+                </button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowBulkModal(false)}
+                className="btn-outline py-2.5"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={bulkSelectedPhones.length === 0}
+                onClick={handleConfirmBulkImport}
+                className="btn-solid py-2.5 disabled:opacity-40"
+              >
+                Import ({bulkSelectedPhones.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* LONG-TAP CONTACT MODAL */}
       {menuContact && (

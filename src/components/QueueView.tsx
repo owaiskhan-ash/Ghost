@@ -11,7 +11,7 @@ import {
   Users,
 } from 'lucide-react';
 import type { ScheduledWhatsAppTask, SentHistoryItem } from '../types/ghost';
-import { formatTime12h } from '../data/seedData';
+import { formatRepeatSummary, formatTime12h } from '../data/seedData';
 
 interface QueueViewProps {
   tasks: ScheduledWhatsAppTask[];
@@ -129,6 +129,7 @@ export const QueueView: React.FC<QueueViewProps> = ({
             const isBatch = task.recipients && task.recipients.length > 1;
             const appTag =
               task.whatsappPackage === 'com.whatsapp.w4b' ? 'WA BIZ' : 'WA';
+            const isRecurring = task.repeatMode !== 'once';
 
             return (
               <div
@@ -159,7 +160,6 @@ export const QueueView: React.FC<QueueViewProps> = ({
                     </span>
                   </div>
 
-                  {/* Active vs Paused Status Pill */}
                   <span
                     className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold uppercase shrink-0 flex items-center gap-1 ${
                       task.enabled
@@ -204,18 +204,15 @@ export const QueueView: React.FC<QueueViewProps> = ({
                       {appTag}
                     </span>
                     <span className="text-xs font-mono text-ghost-muted flex items-center gap-1 truncate">
-                      {task.repeatMode === 'daily' ? (
-                        <>
-                          <Repeat className="w-3 h-3 text-ghost-accent shrink-0" />{' '}
-                          Daily
-                        </>
-                      ) : (
-                        task.scheduledDate
+                      {isRecurring && (
+                        <Repeat className="w-3 h-3 text-ghost-accent shrink-0" />
                       )}
+                      <span className="truncate">
+                        {formatRepeatSummary(task)}
+                      </span>
                     </span>
                   </div>
 
-                  {/* Explicit Pause / Resume + Send Now + Delete */}
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"

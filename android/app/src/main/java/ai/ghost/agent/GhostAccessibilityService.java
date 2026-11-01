@@ -1,10 +1,15 @@
 package ai.ghost.agent;
 
 import android.accessibilityservice.AccessibilityService;
+import android.accessibilityservice.GestureDescription;
+import android.app.KeyguardManager;
 import android.content.Intent;
+import android.graphics.Path;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.DisplayMetrics;
 import android.view.KeyEvent;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -16,10 +21,12 @@ import java.util.List;
 public class GhostAccessibilityService extends AccessibilityService {
 
     private static volatile GhostAccessibilityService activeInstance;
-    private static final long ACTIVE_WINDOW_TIMEOUT_MS = 25_000L;
+    private static final long ACTIVE_WINDOW_TIMEOUT_MS = 28_000L;
     private static final long NEXT_CONTACT_GAP_MS = 1650L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private long lastSwipeUnlockAttemptMs = 0L;
+
     private final Runnable watchdogRunnable = new Runnable() {
         @Override
         public void run() {
@@ -56,7 +63,10 @@ public class GhostAccessibilityService extends AccessibilityService {
                 handler.removeCallbacks(watchdogRunnable);
                 GhostTaskStore.clearAllActiveAndQueuedRuns(this);
                 GhostTaskScheduler.cancelScheduledCallbacks();
-                stopService(new Intent(this, GhostForegroundService.class));
+                try {
+                    stopService(new Intent(this, GhostForegroundService.class));
+                } catch (Throwable ignored) {
+                }
                 performGlobalAction(GLOBAL_ACTION_HOME);
                 return true;
             }
@@ -71,28 +81,48 @@ public class GhostAccessibilityService extends AccessibilityService {
     }
 
     private synchronized void processActiveStep() {
-        JSONObject activeTask = GhostTaskStore.getPendingActiveRun(this);
+        final JSONObject activeTask = GhostTaskStore.getPendingActiveRun(this);
         if (activeTask == null) return;
 
         long now = System.currentTimeMillis();
         long activatedAt = activeTask.optLong("_activatedAtMs", 0L);
+
+        KeyguardManager km = (KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+        boolean keyguardLocked = km != null && km.isKeyguardLocked();
+        boolean deviceHasPassword = km != null && km.isDeviceSecure();
+
         if (activatedAt > 0L && (now - activatedAt) > ACTIVE_WINDOW_TIMEOUT_MS) {
             GhostTaskStore.setPendingActiveRun(this, null);
+            String reason = (keyguardLocked && deviceHasPassword)
+                    ? "Screen locked with PIN/Password — set Lock Screen to None or Swipe for unattended sends."
+                    : "Timed out waiting for WhatsApp Send button; continuing queue.";
+            String outcome = (keyguardLocked && deviceHasPassword)
+                    ? "LOCKED_BY_PASSWORD"
+                    : "TIMEOUT";
             GhostTaskStore.appendReceipt(
                     this,
                     activeTask.optString("id", "task"),
                     activeTask.optString("contactName", "Contact"),
-                    "TIMEOUT",
+                    outcome,
                     activeTask.optString("messageBody", ""),
-                    "Timed out waiting for WhatsApp Send button; continuing queue."
+                    reason
             );
             advanceQueueOrFinish();
             return;
         }
 
-        // Wait for Android to finish opening/switching into the target contact's chat window
         long readyAfter = activeTask.optLong("_readyAfterMs", 0L);
         if (readyAfter > 0L && now < readyAfter) {
+            return;
+        }
+
+        // If screen is locked WITHOUT password (Swipe-only lock screen still lingering on OEM ROM),
+        // perform upward swipe gesture to dismiss the Swipe screen and re-fire WhatsApp intent!
+        if (keyguardLocked && !deviceHasPassword) {
+            if (now - lastSwipeUnlockAttemptMs > 2400L) {
+                lastSwipeUnlockAttemptMs = now;
+                performSwipeUpToDismissNonPasswordLock(activeTask);
+            }
             return;
         }
 
@@ -104,6 +134,23 @@ public class GhostAccessibilityService extends AccessibilityService {
         );
         String pkg = root.getPackageName().toString();
         if (!expectedPkg.equals(pkg)) {
+            // If keyguard just cleared and we're on Home launcher, re-fire WhatsApp URI once
+            if (!keyguardLocked && !activeTask.optBoolean("_reopenedAfterUnlock", false)) {
+                String waUri = activeTask.optString("_waUri", "");
+                if (!waUri.isEmpty() && (now - activatedAt) > 2200L) {
+                    try {
+                        activeTask.put("_reopenedAfterUnlock", true);
+                        activeTask.put("_readyAfterMs", now + 1100L);
+                        GhostTaskStore.setPendingActiveRun(this, activeTask);
+
+                        Intent reopen = new Intent(Intent.ACTION_VIEW, Uri.parse(waUri));
+                        reopen.setPackage(expectedPkg);
+                        reopen.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                        startActivity(reopen);
+                    } catch (Throwable ignored) {
+                    }
+                }
+            }
             return;
         }
 
@@ -156,6 +203,52 @@ public class GhostAccessibilityService extends AccessibilityService {
         }
     }
 
+    private void performSwipeUpToDismissNonPasswordLock(final JSONObject step) {
+        try {
+            DisplayMetrics dm = getResources().getDisplayMetrics();
+            float centerX = dm.widthPixels * 0.5f;
+            float startY = dm.heightPixels * 0.82f;
+            float endY = dm.heightPixels * 0.18f;
+
+            Path swipePath = new Path();
+            swipePath.moveTo(centerX, startY);
+            swipePath.lineTo(centerX, endY);
+
+            GestureDescription.StrokeDescription stroke =
+                    new GestureDescription.StrokeDescription(swipePath, 0L, 260L);
+            GestureDescription gesture = new GestureDescription.Builder()
+                    .addStroke(stroke)
+                    .build();
+
+            dispatchGesture(gesture, new GestureResultCallback() {
+                @Override
+                public void onCompleted(GestureDescription gestureDescription) {
+                    super.onCompleted(gestureDescription);
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            String waUri = step.optString("_waUri", "");
+                            String targetPkg = GhostTaskScheduler.normalizeTargetPackage(
+                                    step.optString("whatsappPackage", GhostTaskScheduler.PKG_WHATSAPP)
+                            );
+                            if (!waUri.isEmpty()) {
+                                try {
+                                    Intent waIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(waUri));
+                                    waIntent.setPackage(targetPkg);
+                                    waIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                                    startActivity(waIntent);
+                                } catch (Throwable ignored) {
+                                }
+                            }
+                            scheduleWatchdogTick(900L);
+                        }
+                    }, 500L);
+                }
+            }, null);
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void advanceQueueOrFinish() {
         int remaining = GhostTaskStore.getRemainingQueueCount(this);
         if (remaining > 0) {
@@ -166,7 +259,10 @@ public class GhostAccessibilityService extends AccessibilityService {
         } else {
             handler.removeCallbacks(watchdogRunnable);
             GhostTaskScheduler.releaseBatchWakeLock();
-            stopService(new Intent(this, GhostForegroundService.class));
+            try {
+                stopService(new Intent(this, GhostForegroundService.class));
+            } catch (Throwable ignored) {
+            }
         }
     }
 

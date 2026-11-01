@@ -9,26 +9,40 @@ import org.json.JSONObject;
 public class GhostAlarmReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (intent == null) return;
-        String taskId = intent.getStringExtra(GhostTaskScheduler.EXTRA_TASK_ID);
+        if (context == null || intent == null) return;
+        final String taskId = intent.getStringExtra(GhostTaskScheduler.EXTRA_TASK_ID);
         if (taskId == null || taskId.isEmpty()) return;
 
-        JSONObject task = GhostTaskStore.getTaskById(context, taskId);
-        if (task == null || !task.optBoolean("enabled", true)) {
-            return;
-        }
+        final Context appCtx = context.getApplicationContext();
+        final PendingResult pendingResult = goAsync();
 
         try {
-            GhostTaskScheduler.launchWhatsAppTaskNow(context, task);
+            JSONObject task = GhostTaskStore.getTaskById(appCtx, taskId);
+            if (task == null || !task.optBoolean("enabled", true)) {
+                pendingResult.finish();
+                return;
+            }
 
-            String repeatMode = task.optString("repeatMode", "once");
-            if ("daily".equalsIgnoreCase(repeatMode)) {
-                GhostTaskScheduler.scheduleAlarmForTask(context, task);
+            // Acquire wake locks & launch WhatsApp even when Ghost MainActivity is closed
+            GhostTaskScheduler.launchWhatsAppTaskNow(appCtx, task);
+
+            if (GhostTaskScheduler.isRecurringTask(task)) {
+                long nextTrigger = GhostTaskScheduler.scheduleAlarmForTask(appCtx, task);
+                if (nextTrigger > 0L) {
+                    task.put("triggerAtMillis", nextTrigger);
+                    task.put("scheduledDate", GhostTaskScheduler.formatDateYmd(nextTrigger));
+                }
+                GhostTaskStore.upsertTaskAndSyncCache(appCtx, task);
             } else {
                 task.put("enabled", false);
-                GhostTaskStore.upsertTask(context, task);
+                GhostTaskStore.upsertTaskAndSyncCache(appCtx, task);
             }
-        } catch (Exception ignored) {
+        } catch (Throwable ignored) {
+        } finally {
+            try {
+                pendingResult.finish();
+            } catch (Throwable ignored) {
+            }
         }
     }
 }

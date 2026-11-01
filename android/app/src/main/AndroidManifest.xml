@@ -1,19 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="ai.ghost.agent"
-    android:versionCode="8"
-    android:versionName="1.7.0">
+    android:versionCode="9"
+    android:versionName="1.8.0">
 
     <uses-sdk
         android:minSdkVersion="26"
         android:targetSdkVersion="34" />
 
-    <!-- Core Automation, Scheduling & Safety Permissions -->
+    <!-- Core Automation, Background Execution, Wake/Keyguard & Contacts Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -56,10 +59,22 @@
             </intent-filter>
         </activity>
 
-        <!-- Ghost Screen Reader & Controller AccessibilityService -->
+        <!-- Transparent Screen-Wake & Non-Password Keyguard Dismiss Trampoline -->
+        <activity
+            android:name=".GhostWakeAndUnlockActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:taskAffinity=""
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- Ghost Screen Reader & Controller AccessibilityService (Runs 24/7 even when app is closed) -->
         <service
             android:name=".GhostAccessibilityService"
             android:exported="true"
+            android:directBootAware="true"
             android:label="@string/accessibility_service_label"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
@@ -81,10 +96,11 @@
                 android:value="screen_automation_killswitch" />
         </service>
 
-        <!-- Exact 5:00 AM Alarm Wake Receiver -->
+        <!-- Exact Scheduled Alarm Wake Receiver -->
         <receiver
             android:name=".GhostAlarmReceiver"
             android:enabled="true"
+            android:directBootAware="true"
             android:exported="false" />
 
         <!-- Emergency 1-Tap Kill-Switch Broadcast Receiver -->
@@ -97,14 +113,19 @@
             </intent-filter>
         </receiver>
 
-        <!-- Reboot Alarm Restorer -->
+        <!-- Reboot, Package Update & Timezone Alarm Restorer -->
         <receiver
             android:name=".GhostBootReceiver"
             android:enabled="true"
+            android:directBootAware="true"
             android:exported="true">
             <intent-filter>
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
 
