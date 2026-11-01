@@ -326,6 +326,11 @@ public final class GhostTaskScheduler {
         JSONArray steps = GhostTaskStore.expandTaskIntoSteps(task);
         if (steps.length() == 0) return;
 
+        GhostAccessibilityService activeService = GhostAccessibilityService.getActiveInstance();
+        if (activeService != null) {
+            activeService.prepareForAutomationRun();
+        }
+
         GhostTaskStore.enqueueRunSteps(appCtx, steps);
         int totalPending = GhostTaskStore.getRemainingQueueCount(appCtx) + 1;
         acquireBatchWakeLock(appCtx, totalPending * 18_000L + 20_000L);
@@ -353,11 +358,16 @@ public final class GhostTaskScheduler {
 
         JSONObject step = GhostTaskStore.popNextRunStep(appCtx);
         if (step == null) {
-            try {
-                appCtx.stopService(new Intent(appCtx, GhostForegroundService.class));
-            } catch (Throwable ignored) {
+            GhostAccessibilityService activeService = GhostAccessibilityService.getActiveInstance();
+            if (activeService != null) {
+                activeService.finishQueueUiAndSleep();
+            } else {
+                try {
+                    appCtx.stopService(new Intent(appCtx, GhostForegroundService.class));
+                } catch (Throwable ignored) {
+                }
+                releaseBatchWakeLock();
             }
-            releaseBatchWakeLock();
             return;
         }
 

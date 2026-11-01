@@ -6,6 +6,7 @@ import android.app.KeyguardManager;
 import android.content.Intent;
 import android.graphics.Path;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -23,9 +24,40 @@ public class GhostAccessibilityService extends AccessibilityService {
     private static volatile GhostAccessibilityService activeInstance;
     private static final long ACTIVE_WINDOW_TIMEOUT_MS = 28_000L;
     private static final long NEXT_CONTACT_GAP_MS = 1650L;
+    private static final long HIDE_KEYBOARD_DELAY_MS = 300L;
+    private static final long RETURN_HOME_DELAY_MS = 650L;
+    private static final long SCREEN_OFF_DELAY_MS = 1100L;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private long lastSwipeUnlockAttemptMs = 0L;
+    private volatile boolean finishSequenceScheduled = false;
+
+    private final Runnable hideKeyboardRunnable = new Runnable() {
+        @Override
+        public void run() {
+            // Android's global Back action dismisses the active soft keyboard.
+            performGlobalAction(GLOBAL_ACTION_BACK);
+        }
+    };
+
+    private final Runnable returnHomeRunnable = new Runnable() {
+        @Override
+        public void run() {
+            performGlobalAction(GLOBAL_ACTION_HOME);
+        }
+    };
+
+    private final Runnable screenOffRunnable = new Runnable() {
+        @Override
+        public void run() {
+            GhostTaskScheduler.releaseBatchWakeLock();
+            // GLOBAL_ACTION_LOCK_SCREEN turns the display off immediately and is
+            // available to AccessibilityService from Android 9 (API 28).
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN);
+            }
+        }
+    };
 
     private final Runnable watchdogRunnable = new Runnable() {
         @Override
@@ -39,6 +71,37 @@ public class GhostAccessibilityService extends AccessibilityService {
 
     public static GhostAccessibilityService getActiveInstance() {
         return activeInstance;
+    }
+
+    /** Cancel any previous post-send cleanup before a new queue begins. */
+    public void prepareForAutomationRun() {
+        cancelFinishSequence();
+    }
+
+    /**
+     * Final queue cleanup: dismiss the keyboard, return Home, release wake locks,
+     * then turn the display off. Delays give WhatsApp time to commit the send.
+     */
+    public void finishQueueUiAndSleep() {
+        if (finishSequenceScheduled) return;
+        finishSequenceScheduled = true;
+        handler.removeCallbacks(watchdogRunnable);
+
+        try {
+            stopService(new Intent(this, GhostForegroundService.class));
+        } catch (Throwable ignored) {
+        }
+
+        handler.postDelayed(hideKeyboardRunnable, HIDE_KEYBOARD_DELAY_MS);
+        handler.postDelayed(returnHomeRunnable, RETURN_HOME_DELAY_MS);
+        handler.postDelayed(screenOffRunnable, SCREEN_OFF_DELAY_MS);
+    }
+
+    private void cancelFinishSequence() {
+        handler.removeCallbacks(hideKeyboardRunnable);
+        handler.removeCallbacks(returnHomeRunnable);
+        handler.removeCallbacks(screenOffRunnable);
+        finishSequenceScheduled = false;
     }
 
     public void scheduleWatchdogTick(long delayMs) {
@@ -257,12 +320,7 @@ public class GhostAccessibilityService extends AccessibilityService {
                     NEXT_CONTACT_GAP_MS
             );
         } else {
-            handler.removeCallbacks(watchdogRunnable);
-            GhostTaskScheduler.releaseBatchWakeLock();
-            try {
-                stopService(new Intent(this, GhostForegroundService.class));
-            } catch (Throwable ignored) {
-            }
+            finishQueueUiAndSleep();
         }
     }
 
@@ -292,6 +350,7 @@ public class GhostAccessibilityService extends AccessibilityService {
     @Override
     public void onInterrupt() {
         handler.removeCallbacks(watchdogRunnable);
+        cancelFinishSequence();
         GhostTaskStore.clearAllActiveAndQueuedRuns(this);
         GhostTaskScheduler.cancelScheduledCallbacks();
     }
@@ -299,6 +358,8 @@ public class GhostAccessibilityService extends AccessibilityService {
     @Override
     public boolean onUnbind(Intent intent) {
         handler.removeCallbacks(watchdogRunnable);
+        cancelFinishSequence();
+        GhostTaskScheduler.releaseBatchWakeLock();
         activeInstance = null;
         return super.onUnbind(intent);
     }
