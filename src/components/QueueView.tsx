@@ -10,7 +10,7 @@ import {
   Users,
 } from 'lucide-react';
 import type { ScheduledWhatsAppTask, SentHistoryItem } from '../types/ghost';
-import { formatRepeatSummary, formatTime12h } from '../data/seedData';
+import { formatRepeatSummary, formatTime24h } from '../data/seedData';
 
 interface QueueViewProps {
   tasks: ScheduledWhatsAppTask[];
@@ -148,7 +148,7 @@ export const QueueView: React.FC<QueueViewProps> = ({
                     />
                   </div>
                   <div className="soft-row-meta">
-                    {formatTime12h(task.scheduledTime24)} · {appTag} ·{' '}
+                    {formatTime24h(task.scheduledTime24)} · {appTag} ·{' '}
                     {isRecurring ? formatRepeatSummary(task) : 'Once'} · “
                     {messagePreview}”
                   </div>

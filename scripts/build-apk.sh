@@ -6,8 +6,8 @@ cd "$ROOT_DIR"
 
 bash "$ROOT_DIR/scripts/setup-toolchain.sh"
 
-VERSION_NAME="1.8.5"
-VERSION_CODE="14"
+VERSION_NAME="1.8.6"
+VERSION_CODE="15"
 APK_FILENAME="Ghost-v${VERSION_NAME}.apk"
 
 TOOLCHAIN_DIR="${ANDROID_TOOLCHAIN_DIR:-/tmp/android-toolchain}"

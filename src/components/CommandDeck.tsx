@@ -27,7 +27,7 @@ import type {
 } from '../types/ghost';
 import {
   computeNextTaskTrigger,
-  formatTime12h,
+  formatTime24h,
   getTodayOrTomorrowDate,
   hasDynamicVariables,
   makeInitials,
@@ -49,16 +49,6 @@ interface CommandDeckProps {
   onDeleteGroup: (id: string) => void;
   onScheduleTask: (task: ScheduledWhatsAppTask) => void;
   onPreviewOrSendNow: (task: ScheduledWhatsAppTask) => void;
-}
-
-function addMinutesFromNow(mins: number): { date: string; time24: string } {
-  const dt = new Date(Date.now() + mins * 60 * 1000);
-  const hh = String(dt.getHours()).padStart(2, '0');
-  const mm = String(dt.getMinutes()).padStart(2, '0');
-  const yyyy = dt.getFullYear();
-  const mo = String(dt.getMonth() + 1).padStart(2, '0');
-  const dd = String(dt.getDate()).padStart(2, '0');
-  return { date: `${yyyy}-${mo}-${dd}`, time24: `${hh}:${mm}` };
 }
 
 function normalizeDigitsKey(phone: string): string {
@@ -394,37 +384,18 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
 
   const parsedTime = useMemo(() => {
     const [hStr, mStr] = time24.split(':');
-    const h24 = Number(hStr) || 0;
-    const min = Number(mStr) || 0;
-    const period: 'AM' | 'PM' = h24 >= 12 ? 'PM' : 'AM';
-    const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
-    return { h24, h12, min, period };
+    const h24 = Math.min(23, Math.max(0, Number(hStr) || 0));
+    const min = Math.min(59, Math.max(0, Number(mStr) || 0));
+    return { h24, min };
   }, [time24]);
 
-  const updateTimeParts = (h12: number, min: number, period: 'AM' | 'PM') => {
-    let h24 = h12 % 12;
-    if (period === 'PM') h24 += 12;
+  const updateTimeParts = (h24: number, min: number) => {
     const nextTime = `${String(h24).padStart(2, '0')}:${String(min).padStart(
       2,
       '0'
     )}`;
     setTime24(nextTime);
     setDateStr(getTodayOrTomorrowDate(nextTime));
-  };
-
-  const applyQuickTime = (preset: '1m' | '5m' | '9am') => {
-    if (preset === '1m') {
-      const next = addMinutesFromNow(1);
-      setTime24(next.time24);
-      setDateStr(next.date);
-    } else if (preset === '5m') {
-      const next = addMinutesFromNow(5);
-      setTime24(next.time24);
-      setDateStr(next.date);
-    } else if (preset === '9am') {
-      setTime24('09:00');
-      setDateStr(getTodayOrTomorrowDate('09:00'));
-    }
   };
 
   const toggleRepeatWeekday = (dayIdx: number) => {
@@ -1084,90 +1055,43 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             <Clock className="w-3.5 h-3.5 text-ghost-accent" />
             <span>Time</span>
           </span>
-
-          <div className="flex items-center gap-1">
-            {(
-              [
-                { id: '1m', label: '+1m' },
-                { id: '5m', label: '+5m' },
-                { id: '9am', label: '9a' },
-              ] as const
-            ).map((q) => (
-              <button
-                key={q.id}
-                type="button"
-                onClick={() => applyQuickTime(q.id)}
-                className="px-1.5 py-0.5 rounded-md bg-ghost-elevated hover:bg-ghost-accent hover:text-ghost-accentInk text-[10px] font-mono font-semibold text-ghost-secondary transition"
-              >
-                {q.label}
-              </button>
-            ))}
-          </div>
+          <span className="text-[10px] font-medium text-ghost-muted">24-hour</span>
         </div>
 
-        <div className="flex items-center justify-between gap-1.5">
-          <div className="flex items-center gap-1">
-            <select
-              aria-label="Hour"
-              value={parsedTime.h12}
-              onChange={(e) =>
-                updateTimeParts(
-                  Number(e.target.value),
-                  parsedTime.min,
-                  parsedTime.period
-                )
-              }
-              className="appearance-none bento-input px-2.5 py-2 font-mono text-xl font-bold text-center cursor-pointer"
-            >
-              {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
-                <option key={h} value={h}>
-                  {String(h).padStart(2, '0')}
-                </option>
-              ))}
-            </select>
-
-            <span className="font-mono text-lg font-bold text-ghost-accent">
-              :
-            </span>
-
-            <select
-              aria-label="Minute"
-              value={parsedTime.min}
-              onChange={(e) =>
-                updateTimeParts(
-                  parsedTime.h12,
-                  Number(e.target.value),
-                  parsedTime.period
-                )
-              }
-              className="appearance-none bento-input px-2.5 py-2 font-mono text-xl font-bold text-center cursor-pointer"
-            >
-              {Array.from({ length: 60 }, (_, m) => m).map((m) => (
-                <option key={m} value={m}>
-                  {String(m).padStart(2, '0')}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            {(['AM', 'PM'] as const).map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() =>
-                  updateTimeParts(parsedTime.h12, parsedTime.min, p)
-                }
-                className={`px-2 py-0.5 rounded-lg font-mono text-[10px] font-bold border transition ${
-                  parsedTime.period === p
-                    ? 'bg-ghost-accent text-ghost-accentInk border-ghost-accent'
-                    : 'bg-ghost-elevated text-ghost-secondary border-transparent'
-                }`}
-              >
-                {p}
-              </button>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+          <select
+            aria-label="Hour (24-hour)"
+            value={parsedTime.h24}
+            onChange={(e) =>
+              updateTimeParts(Number(e.target.value), parsedTime.min)
+            }
+            className="w-full appearance-none bento-input px-2 py-2 font-mono text-xl font-bold text-center cursor-pointer"
+          >
+            {Array.from({ length: 24 }, (_, h) => h).map((h) => (
+              <option key={h} value={h}>
+                {String(h).padStart(2, '0')}
+              </option>
             ))}
-          </div>
+          </select>
+
+          <span className="font-mono text-lg font-bold text-ghost-accent">
+            :
+          </span>
+
+          <select
+            aria-label="Minute"
+            value={parsedTime.min}
+            onChange={(e) =>
+              updateTimeParts(parsedTime.h24, Number(e.target.value))
+            }
+            className="w-full appearance-none bento-input px-2 py-2 font-mono text-xl font-bold text-center cursor-pointer"
+          >
+            {Array.from({ length: 60 }, (_, m) => m).map((m) => (
+              <option key={m} value={m}>
+                {String(m).padStart(2, '0')}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="bento-input px-2.5 py-1.5 flex items-center gap-1.5">
@@ -1449,7 +1373,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
               {whatsappPackage === 'com.whatsapp.w4b'
                 ? 'WA Business'
                 : 'WhatsApp'}{' '}
-              · {formatTime12h(time24)} · {repeatMode}
+              · {formatTime24h(time24)} · {repeatMode}
             </div>
           </div>
 

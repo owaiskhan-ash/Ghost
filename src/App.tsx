@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useState } from 'react';
 import {
-  Bird,
   Clock,
   Moon,
   Plus,
@@ -44,6 +43,8 @@ import { CommandDeck } from './components/CommandDeck';
 import { QueueView } from './components/QueueView';
 import { SetupView } from './components/SetupView';
 import { LiveScreenStage } from './components/LiveScreenStage';
+import ghostLogoLight from '../ghost-soft-ui-logo.png';
+import ghostLogoDark from '../ghost-soft-ui-logo-dark.png';
 
 type ActiveTab = 'new' | 'scheduled' | 'settings';
 
@@ -178,9 +179,31 @@ export function App() {
         syncNativeState();
       }
     };
+    const onReturnToApp = () => syncNativeState();
     document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
+    window.addEventListener('focus', onReturnToApp);
+    window.addEventListener('pageshow', onReturnToApp);
+    window.addEventListener('ghost:device-status-changed', onReturnToApp);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('focus', onReturnToApp);
+      window.removeEventListener('pageshow', onReturnToApp);
+      window.removeEventListener('ghost:device-status-changed', onReturnToApp);
+    };
   }, [nativeMode]);
+
+  // Permission settings are managed by Android outside the WebView. Poll only
+  // while this screen is open so delayed OEM permission updates settle visibly.
+  useEffect(() => {
+    if (!nativeMode || activeTab !== 'settings') return;
+
+    const refreshPermissionState = () => {
+      setDeviceStatus(getAndroidDeviceStatus());
+    };
+    refreshPermissionState();
+    const id = window.setInterval(refreshPermissionState, 1500);
+    return () => window.clearInterval(id);
+  }, [activeTab, nativeMode]);
 
   const handleBulkAddContacts = (items: SavedContact[]) => {
     if (items.length === 0) return;
@@ -383,8 +406,13 @@ export function App() {
       {/* Raised tactile app bar */}
       <header className="soft-header">
         <div className="soft-header-brand">
-          <div className="soft-icon-well" aria-hidden="true">
-            <Bird />
+          <div className="soft-icon-well soft-header-logo-well" aria-hidden="true">
+            <img
+              src={darkMode ? ghostLogoDark : ghostLogoLight}
+              alt=""
+              className="soft-header-logo"
+              draggable={false}
+            />
           </div>
           <div className="min-w-0">
             <div className="brand-wordmark">Ghost</div>

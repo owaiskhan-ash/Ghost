@@ -223,7 +223,9 @@ export const SetupView: React.FC<SetupViewProps> = ({
                     type="button"
                     onClick={() => openNativeSettings(item.target)}
                     className={`soft-toggle ${item.ok ? 'is-active' : ''}`}
+                    aria-pressed={item.ok}
                     aria-label={`${item.ok ? 'Review' : 'Enable'} ${item.label}`}
+                    title={item.ok ? 'Permission enabled' : 'Permission required'}
                   >
                     <span className="soft-toggle-knob">
                       {item.ok && <Check />}

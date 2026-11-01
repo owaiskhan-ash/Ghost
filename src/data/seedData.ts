@@ -32,14 +32,21 @@ const SHORT_MONTHS = [
   'Dec',
 ] as const;
 
-export function formatTime12h(time24: string): string {
+export function formatTime24h(time24: string): string {
   const [hStr, mStr] = time24.split(':');
   const h = Number(hStr);
   const m = Number(mStr);
-  if (Number.isNaN(h) || Number.isNaN(m)) return time24;
-  const period = h >= 12 ? 'PM' : 'AM';
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
+  if (
+    !Number.isInteger(h) ||
+    !Number.isInteger(m) ||
+    h < 0 ||
+    h > 23 ||
+    m < 0 ||
+    m > 59
+  ) {
+    return time24;
+  }
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 export function formatDateYmd(dt: Date): string {

@@ -3,6 +3,7 @@ package ai.ghost.agent;
 import android.Manifest;
 import android.app.AlarmManager;
 import android.app.KeyguardManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -109,12 +110,24 @@ public class GhostNativeBridge {
     }
 
     private boolean isAccessibilityServiceEnabled() {
-        String expected = activity.getPackageName() + "/" + GhostAccessibilityService.class.getName();
+        ComponentName service = new ComponentName(activity, GhostAccessibilityService.class);
+        String expectedFull = service.flattenToString();
+        String expectedShort = service.flattenToShortString();
         String enabled = Settings.Secure.getString(
                 activity.getContentResolver(),
                 Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         );
-        return enabled != null && enabled.contains(expected);
+        if (enabled == null || enabled.trim().isEmpty()) return false;
+
+        String[] components = enabled.split(":");
+        for (String component : components) {
+            String normalized = component.trim();
+            if (normalized.equalsIgnoreCase(expectedFull)
+                    || normalized.equalsIgnoreCase(expectedShort)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @JavascriptInterface
