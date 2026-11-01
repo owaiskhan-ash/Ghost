@@ -2,14 +2,20 @@ import type {
   AndroidDeviceStatus,
   SavedContact,
   ScheduledWhatsAppTask,
+  SentHistoryItem,
 } from '../types/ghost';
 import { makeInitials } from '../data/seedData';
 
 interface NativeAndroidInterface {
   getDeviceStatusJson?: () => string;
   setDarkMode?: (dark: boolean) => void;
+  saveCacheValue?: (key: string, value: string) => void;
+  loadCacheValue?: (key: string) => string;
+  clearPhoneCache?: () => void;
   scheduleTask?: (taskJson: string) => string;
+  pauseTask?: (taskId: string) => void;
   cancelTask?: (taskId: string) => void;
+  getNativeReceiptsJson?: () => string;
   executeTaskNow?: (taskJson: string) => string;
   emergencyStop?: () => void;
   openAccessibilitySettings?: () => void;
@@ -23,6 +29,83 @@ declare global {
     GhostNativeBridge?: NativeAndroidInterface;
     onGhostContactPicked?: (contact: { name: string; phone: string }) => void;
   }
+}
+
+const LEGACY_DUMMY_KEYS = [
+  'ghost_contacts_v1',
+  'ghost_contacts_v2',
+  'ghost_contacts_v3',
+  'ghost_contacts_v4',
+  'ghost_tasks_v1',
+  'ghost_tasks_v2',
+  'ghost_tasks_v3',
+  'ghost_tasks_v4',
+  'ghost_history_v1',
+  'ghost_history_v2',
+  'ghost_history_v3',
+  'ghost_history_v4',
+];
+
+export function purgeLegacyDummyStorage(): void {
+  try {
+    for (const k of LEGACY_DUMMY_KEYS) {
+      localStorage.removeItem(k);
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+export function loadFromPhoneCache<T>(key: string, fallback: T): T {
+  // 1. Prefer Android Native SharedPreferences Phone Cache when running inside APK
+  try {
+    if (window.GhostNativeBridge?.loadCacheValue) {
+      const nativeRaw = window.GhostNativeBridge.loadCacheValue(key);
+      if (nativeRaw && nativeRaw.trim().length > 0) {
+        return JSON.parse(nativeRaw) as T;
+      }
+    }
+  } catch {
+    // Fallback to WebView/Browser localStorage
+  }
+
+  // 2. Fallback to persistent localStorage cache
+  try {
+    const webRaw = localStorage.getItem(key);
+    if (webRaw && webRaw.trim().length > 0) {
+      return JSON.parse(webRaw) as T;
+    }
+  } catch {
+    // Return empty fallback
+  }
+
+  return fallback;
+}
+
+export function saveToPhoneCache<T>(key: string, value: T): void {
+  const serialized = JSON.stringify(value);
+  try {
+    window.GhostNativeBridge?.saveCacheValue?.(key, serialized);
+  } catch {
+    // Ignore outside native APK
+  }
+  try {
+    localStorage.setItem(key, serialized);
+  } catch {
+    // Ignore quota errors
+  }
+}
+
+export function clearAllPhoneCache(keysToClear: string[]): void {
+  try {
+    window.GhostNativeBridge?.clearPhoneCache?.();
+  } catch {}
+  try {
+    for (const key of keysToClear) {
+      localStorage.removeItem(key);
+    }
+    purgeLegacyDummyStorage();
+  } catch {}
 }
 
 export function isRunningInNativeApk(): boolean {
@@ -57,7 +140,7 @@ export function getAndroidDeviceStatus(): AndroidDeviceStatus {
 
   return {
     isNativeApk: false,
-    deviceModel: 'Android Preview',
+    deviceModel: 'Web Cache Mode',
     androidVersion: 'Android 14',
     accessibilityEnabled: true,
     exactAlarmAllowed: true,
@@ -78,8 +161,62 @@ export function scheduleNativeAlarmTask(task: ScheduledWhatsAppTask): boolean {
   return false;
 }
 
+export function pauseNativeAlarmTask(taskId: string): void {
+  if (window.GhostNativeBridge?.pauseTask) {
+    try {
+      window.GhostNativeBridge.pauseTask(taskId);
+      return;
+    } catch {}
+  }
+  window.GhostNativeBridge?.cancelTask?.(taskId);
+}
+
 export function cancelNativeAlarmTask(taskId: string): void {
   window.GhostNativeBridge?.cancelTask?.(taskId);
+}
+
+export function loadNativeReceipts(): SentHistoryItem[] {
+  if (!window.GhostNativeBridge?.getNativeReceiptsJson) return [];
+  try {
+    const raw = JSON.parse(
+      window.GhostNativeBridge.getNativeReceiptsJson()
+    ) as Array<{
+      id: string;
+      taskId: string;
+      contactName: string;
+      executedAt: string;
+      outcome: string;
+      messageText: string;
+      reasonDetail?: string;
+    }>;
+
+    return raw.map((r) => {
+      const ts = Number(r.executedAt);
+      const dt = Number.isFinite(ts) && ts > 0 ? new Date(ts) : new Date();
+      const h = dt.getHours();
+      const m = dt.getMinutes();
+      const period = h >= 12 ? 'PM' : 'AM';
+      const h12 = h % 12 === 0 ? 12 : h % 12;
+      const sentAt = `${String(h12).padStart(2, '0')}:${String(m).padStart(
+        2,
+        '0'
+      )} ${period}`;
+      const isBiz = (r.reasonDetail || '').includes('Business');
+
+      return {
+        id: r.id,
+        taskId: r.taskId || 'native',
+        contactName: r.contactName || 'Contact',
+        contactPhone: '',
+        messageBody: r.messageText || '',
+        whatsappPackage: isBiz ? 'com.whatsapp.w4b' : 'com.whatsapp',
+        sentAt,
+        status: r.outcome === 'SENT' ? 'SENT' : 'STOPPED',
+      };
+    });
+  } catch {
+    return [];
+  }
 }
 
 export function executeNativeTaskNow(task: ScheduledWhatsAppTask): boolean {

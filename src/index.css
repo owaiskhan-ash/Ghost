@@ -11,56 +11,64 @@
 @tailwind utilities;
 
 :root {
-  /* Light Mode: Crisp Light Grey + Fluorescent Red */
-  --ghost-canvas: 235 238 242;
-  --ghost-surface: 246 247 249;
-  --ghost-elevated: 255 255 255;
-  --ghost-recessed: 223 227 234;
-  --ghost-border: 196 203 214;
-  --ghost-border-strong: 146 156 172;
-  --ghost-ink: 17 19 24;
-  --ghost-secondary: 74 82 98;
-  --ghost-muted: 118 127 145;
-  --ghost-red: 255 30 56;
-  --ghost-red-hover: 230 16 42;
-  --ghost-red-soft: 255 226 231;
+  /* Light Mode: Fluorescent Green BG (#32FF4A) + Black Secondary (#07090A) */
+  --ghost-canvas: 50 255 74;
+  --ghost-surface: 86 255 106;
+  --ghost-elevated: 120 255 136;
+  --ghost-recessed: 38 228 60;
+  --ghost-border: 7 9 10;
+  --ghost-border-strong: 7 9 10;
+  --ghost-ink: 7 9 10;
+  --ghost-secondary: 15 36 19;
+  --ghost-muted: 24 64 32;
+  --ghost-accent: 7 9 10;
+  --ghost-accent-hover: 26 32 28;
+  --ghost-accent-ink: 50 255 74;
+  --ghost-accent-soft: 36 220 58;
+  --ghost-shadow-neon: 0 6px 20px -4px rgba(7, 9, 10, 0.35);
+  --ghost-shadow-neon-sm: 0 3px 10px -2px rgba(7, 9, 10, 0.25);
+  --ghost-shadow-dock: 0 14px 34px -6px rgba(7, 9, 10, 0.38);
 }
 
 html.dark {
-  /* Dark Mode: Pitch Black + Fluorescent Red */
-  --ghost-canvas: 8 8 10;
-  --ghost-surface: 15 15 19;
-  --ghost-elevated: 22 22 28;
-  --ghost-recessed: 28 28 36;
-  --ghost-border: 42 42 52;
-  --ghost-border-strong: 74 74 90;
-  --ghost-ink: 246 247 249;
-  --ghost-secondary: 170 176 190;
-  --ghost-muted: 112 118 134;
-  --ghost-red: 255 30 56;
-  --ghost-red-hover: 255 56 79;
-  --ghost-red-soft: 54 12 20;
+  /* Dark Mode (Default): Pitch Black (#07090A) + Fluorescent Green (#32FF4A) */
+  --ghost-canvas: 7 9 10;
+  --ghost-surface: 15 18 20;
+  --ghost-elevated: 22 27 30;
+  --ghost-recessed: 28 34 38;
+  --ghost-border: 36 46 50;
+  --ghost-border-strong: 58 74 80;
+  --ghost-ink: 245 250 246;
+  --ghost-secondary: 154 172 161;
+  --ghost-muted: 102 118 108;
+  --ghost-accent: 50 255 74;
+  --ghost-accent-hover: 84 255 104;
+  --ghost-accent-ink: 7 9 10;
+  --ghost-accent-soft: 16 48 22;
+  --ghost-shadow-neon: 0 6px 22px -4px rgba(50, 255, 74, 0.36);
+  --ghost-shadow-neon-sm: 0 2px 12px -2px rgba(50, 255, 74, 0.28);
+  --ghost-shadow-dock: 0 16px 38px -6px rgba(0, 0, 0, 0.72);
 }
 
 @layer components {
-  .box-card {
-    @apply bg-ghost-surface border-[1.5px] border-ghost-border rounded-[2px];
+  .bento-card {
+    @apply bg-ghost-surface border border-ghost-border/25 dark:border-ghost-border rounded-2xl transition-colors;
   }
 
-  .box-input {
-    @apply bg-ghost-elevated border-[1.5px] border-ghost-border focus:border-ghost-red rounded-[2px] text-ghost-ink focus:outline-none transition-colors;
+  .bento-input {
+    @apply bg-ghost-elevated border border-ghost-border/25 dark:border-ghost-border focus:border-ghost-accent rounded-xl text-ghost-ink focus:outline-none transition-colors;
   }
 
   .btn-solid {
-    @apply bg-ghost-red hover:bg-ghost-redHover text-white border-[1.5px] border-ghost-red rounded-[2px] font-bold tracking-wide uppercase text-xs transition active:translate-y-[1px] inline-flex items-center justify-center gap-1.5;
+    @apply bg-ghost-accent hover:bg-ghost-accentHover text-ghost-accentInk border border-ghost-accent rounded-xl font-bold text-xs transition active:scale-[0.99] inline-flex items-center justify-center gap-1.5;
   }
 
   .btn-outline {
-    @apply bg-transparent hover:bg-ghost-elevated text-ghost-ink border-[1.5px] border-ghost-borderStrong hover:border-ghost-red rounded-[2px] font-semibold tracking-wide uppercase text-xs transition active:translate-y-[1px] inline-flex items-center justify-center gap-1.5;
+    @apply bg-transparent hover:bg-ghost-elevated text-ghost-ink border border-ghost-border/35 dark:border-ghost-borderStrong hover:border-ghost-accent rounded-xl font-semibold text-xs transition active:scale-[0.99] inline-flex items-center justify-center gap-1.5;
   }
 
-  .btn-outline-red {
-    @apply bg-transparent hover:bg-ghost-red hover:text-white text-ghost-red border-[1.5px] border-ghost-red rounded-[2px] font-bold tracking-wide uppercase text-xs transition active:translate-y-[1px] inline-flex items-center justify-center gap-1.5;
+  .btn-outline-accent {
+    @apply bg-transparent hover:bg-ghost-accent hover:text-ghost-accentInk text-ghost-ink dark:text-ghost-accent border border-ghost-accent rounded-xl font-bold text-xs transition active:scale-[0.99] inline-flex items-center justify-center gap-1.5;
   }
 }
 
@@ -82,7 +90,7 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
-  transition: background-color 150ms ease, color 150ms ease;
+  transition: background-color 160ms ease, color 160ms ease;
 }
 
 html.dark input[type='date']::-webkit-calendar-picker-indicator {
@@ -91,15 +99,15 @@ html.dark input[type='date']::-webkit-calendar-picker-indicator {
 
 @keyframes neonPulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(255, 30, 56, 0.5);
+    box-shadow: 0 0 0 0 rgba(50, 255, 74, 0.55);
   }
   70% {
-    box-shadow: 0 0 0 6px rgba(255, 30, 56, 0);
+    box-shadow: 0 0 0 6px rgba(50, 255, 74, 0);
   }
 }
 
 .neon-pulse {
-  animation: neonPulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+  animation: neonPulse 2.2s infinite cubic-bezier(0.4, 0, 0.6, 1);
 }
 
 ::-webkit-scrollbar {
@@ -110,6 +118,6 @@ html.dark input[type='date']::-webkit-calendar-picker-indicator {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgb(var(--ghost-border-strong));
-  border-radius: 0px;
+  background: rgb(var(--ghost-border-strong) / 0.45);
+  border-radius: 999px;
 }

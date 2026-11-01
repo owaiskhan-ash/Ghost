@@ -1,4 +1,6 @@
 import type {
+  ContactGroup,
+  QuickTemplate,
   SavedContact,
   ScheduledWhatsAppTask,
   SentHistoryItem,
@@ -58,55 +60,9 @@ export function makeInitials(name: string): string {
   );
 }
 
-export const INITIAL_CONTACTS: SavedContact[] = [
-  {
-    id: 'c-jasmine',
-    name: 'Jasmine',
-    phone: '+919820448210',
-    initials: 'JA',
-    isFavourite: true,
-  },
-  {
-    id: 'c-mom',
-    name: 'Mom',
-    phone: '+919820112233',
-    initials: 'MO',
-  },
-  {
-    id: 'c-rohan',
-    name: 'Rohan',
-    phone: '+919769044110',
-    initials: 'RO',
-  },
-];
-
-const defaultDate = getTodayOrTomorrowDate('05:00');
-
-export const INITIAL_TASKS: ScheduledWhatsAppTask[] = [
-  {
-    id: 'task-jasmine-5am',
-    contactId: 'c-jasmine',
-    contactName: 'Jasmine',
-    contactPhone: '+919820448210',
-    contactInitials: 'JA',
-    messageBody: 'Good morning',
-    scheduledTime24: '05:00',
-    scheduledDate: defaultDate,
-    triggerAtMillis: computeTriggerMillis(defaultDate, '05:00'),
-    repeatMode: 'daily',
-    whatsappPackage: 'com.whatsapp',
-    enabled: true,
-  },
-];
-
-export const INITIAL_HISTORY: SentHistoryItem[] = [
-  {
-    id: 'hist-1',
-    taskId: 'task-jasmine-5am',
-    contactName: 'Jasmine',
-    contactPhone: '+919820448210',
-    messageBody: 'Good morning',
-    sentAt: '05:00 AM',
-    status: 'SENT',
-  },
-];
+// Zero dummy data — all state starts empty and persists in phone cache
+export const EMPTY_CONTACTS: SavedContact[] = [];
+export const EMPTY_GROUPS: ContactGroup[] = [];
+export const EMPTY_TEMPLATES: QuickTemplate[] = [];
+export const EMPTY_TASKS: ScheduledWhatsAppTask[] = [];
+export const EMPTY_HISTORY: SentHistoryItem[] = [];

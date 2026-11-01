@@ -10,6 +10,18 @@ export interface SavedContact {
   isFavourite?: boolean;
 }
 
+export interface ContactGroup {
+  id: string;
+  name: string;
+  memberIds: string[];
+}
+
+export interface QuickTemplate {
+  id: string;
+  label: string;
+  text: string;
+}
+
 export interface BatchRecipient {
   contactId: string;
   contactName: string;
@@ -24,6 +36,8 @@ export interface ScheduledWhatsAppTask {
   contactName: string;
   contactPhone: string;
   contactInitials: string;
+  groupId?: string;
+  groupName?: string;
   messageBody: string;
   recipients?: BatchRecipient[];
   scheduledTime24: string; // "HH:MM" (00:00 - 23:59)
@@ -31,7 +45,7 @@ export interface ScheduledWhatsAppTask {
   triggerAtMillis: number;
   repeatMode: RepeatMode;
   whatsappPackage: TargetWhatsApp;
-  enabled: boolean;
+  enabled: boolean;        // true = Active, false = Paused
   lastSentAt?: string;
 }
 

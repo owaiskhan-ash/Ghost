@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.AlarmManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
@@ -16,10 +17,46 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 public class GhostNativeBridge {
+    private static final String PHONE_CACHE_PREFS = "ghost_phone_cache_v1";
     private final MainActivity activity;
 
     public GhostNativeBridge(MainActivity activity) {
         this.activity = activity;
+    }
+
+    private SharedPreferences cachePrefs() {
+        return activity.getSharedPreferences(PHONE_CACHE_PREFS, Context.MODE_PRIVATE);
+    }
+
+    @JavascriptInterface
+    public void saveCacheValue(String key, String value) {
+        if (key == null) return;
+        if (value == null) {
+            cachePrefs().edit().remove(key).apply();
+        } else {
+            cachePrefs().edit().putString(key, value).apply();
+        }
+    }
+
+    @JavascriptInterface
+    public String loadCacheValue(String key) {
+        if (key == null) return "";
+        String val = cachePrefs().getString(key, null);
+        return val != null ? val : "";
+    }
+
+    @JavascriptInterface
+    public void clearPhoneCache() {
+        JSONArray existingTasks = GhostTaskStore.getTasks(activity);
+        for (int i = 0; i < existingTasks.length(); i++) {
+            JSONObject t = existingTasks.optJSONObject(i);
+            if (t != null) {
+                GhostTaskScheduler.cancelAlarmForTask(activity, t.optString("id", ""));
+            }
+        }
+        GhostTaskScheduler.cancelScheduledCallbacks();
+        GhostTaskStore.clearAllStoreData(activity);
+        cachePrefs().edit().clear().apply();
     }
 
     @JavascriptInterface
@@ -73,14 +110,26 @@ public class GhostNativeBridge {
         try {
             JSONObject task = new JSONObject(taskJson);
             GhostTaskStore.upsertTask(activity, task);
-            long triggerAt = GhostTaskScheduler.scheduleAlarmForTask(activity, task);
-            JSONObject res = new JSONObject();
-            res.put("ok", true);
-            res.put("triggerAtMillis", triggerAt);
-            return res.toString();
+            if (task.optBoolean("enabled", true)) {
+                long triggerAt = GhostTaskScheduler.scheduleAlarmForTask(activity, task);
+                JSONObject res = new JSONObject();
+                res.put("ok", true);
+                res.put("triggerAtMillis", triggerAt);
+                return res.toString();
+            } else {
+                GhostTaskScheduler.cancelAlarmForTask(activity, task.optString("id", ""));
+                return "{\"ok\":true,\"paused\":true}";
+            }
         } catch (Exception e) {
             return "{\"ok\":false}";
         }
+    }
+
+    @JavascriptInterface
+    public void pauseTask(String taskId) {
+        if (taskId == null) return;
+        GhostTaskScheduler.cancelAlarmForTask(activity, taskId);
+        GhostTaskStore.pauseTask(activity, taskId);
     }
 
     @JavascriptInterface
@@ -88,6 +137,11 @@ public class GhostNativeBridge {
         if (taskId == null) return;
         GhostTaskScheduler.cancelAlarmForTask(activity, taskId);
         GhostTaskStore.removeTask(activity, taskId);
+    }
+
+    @JavascriptInterface
+    public String getNativeReceiptsJson() {
+        return GhostTaskStore.getReceipts(activity).toString();
     }
 
     @JavascriptInterface
