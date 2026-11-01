@@ -41,6 +41,7 @@ public class MainActivity extends Activity {
 
     private static final int REQ_PICK_CONTACT = 2001;
     private static final int REQ_READ_CONTACTS_BULK = 2002;
+    private static final int REQ_POST_NOTIFICATIONS = 2003;
 
     private WebView webView;
 
@@ -95,6 +96,7 @@ public class MainActivity extends Activity {
 
         setContentView(webView);
         webView.loadUrl(APP_ENTRY_URL);
+        GhostLockedNotification.ensureChannel(this);
 
         // Ensure all active alarms are armed in AlarmManager whenever app starts
         GhostTaskScheduler.rescheduleAllEnabledTasks(getApplicationContext());
@@ -172,6 +174,30 @@ public class MainActivity extends Activity {
                     );
                 } else {
                     dispatchBulkContactsToWebView();
+                }
+            }
+        });
+    }
+
+    /** Ask only after the user creates a schedule, where the permission has context. */
+    public void ensureLockedSendNotificationPermission() {
+        GhostLockedNotification.ensureChannel(this);
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                        && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(
+                            new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                            REQ_POST_NOTIFICATIONS
+                    );
                 }
             }
         });

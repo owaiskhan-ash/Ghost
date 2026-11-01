@@ -1,4 +1,4 @@
-# Ghost (`v1.8.0`) — Scheduled WhatsApp & WA Business Sender APK
+# Ghost (`v1.8.1`) — Scheduled WhatsApp & WA Business Sender APK
 
 Clean Bento-Grid Android APK built with **Black + Fluorescent Green (`#32FF4A`)** in Dark Mode and **Fluorescent Green BG + Black (`#07090A`)** in Light Mode, featuring **Custom Recurring Schedules**, **Template Dynamic Variables (`{name}`, `{date}`, `{day}`)**, **Bulk Contact Import (Multi-Select)**, **Closed-App Background Execution**, and **Non-Password Lock-Screen Wake & Dismiss**.
 
@@ -10,7 +10,8 @@ Clean Bento-Grid Android APK built with **Black + Fluorescent Green (`#32FF4A`)*
 - **Works When Ghost App Is Closed & On Non-Password Lock Screens**:
   - `AlarmManager.setAlarmClock` + Android 14 `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` + `GhostAccessibilityService` + `Unrestricted Battery` & `Appear on Top` permissions execute schedules reliably even when Ghost is swiped out of Recent Apps.
   - `GhostWakeAndUnlockActivity` (`showWhenLocked`, `turnScreenOn`, `requestDismissKeyguard`) + `GhostAccessibilityService` swipe-up gesture automatically wake sleeping displays and dismiss `None` or `Swipe` (non-password) lock screens before launching `whatsapp://send`.
-- **Signed Release APK**: `releases/Ghost-v1.8.0.apk` (`versionCode 9`, API 26–34, `zipalign` + APK Signature Scheme v2/v3 verified).
+  - If a PIN, pattern, password, or biometric keyguard is actively locked at send time, Ghost does not attempt to bypass Android security; it logs the skipped send and shows an **Unlock phone to send** notification instead.
+- **Signed Release APK**: `releases/Ghost-v1.8.1.apk` (`versionCode 10`, API 26–34, `zipalign` + APK Signature Scheme v2/v3 verified).
 
 ## Development
 
