@@ -1,14 +1,14 @@
 {
   "available": true,
-  "fileName": "Ghost-v1.8.6.apk",
+  "fileName": "Ghost-v1.8.7.apk",
   "packageName": "ai.ghost.agent",
-  "versionName": "1.8.6",
-  "versionCode": 15,
+  "versionName": "1.8.7",
+  "versionCode": 16,
   "minSdk": 26,
   "targetSdk": 34,
-  "sizeBytes": 3063110,
-  "sha256": "b1a6b44782695424bd92ca85bbae661a7a8fa6eda9a97c5d5867fea5a292c7c6",
-  "builtAt": "2026-11-01T16:14:26.316043+00:00",
+  "sizeBytes": 1350986,
+  "sha256": "ffa73e86aa683a32b2c6a17aa9c0b2b09c70bca8208e65e525bdd5db0849dbbc",
+  "builtAt": "2026-11-01T16:32:46.371840+00:00",
   "signatureSchemes": [
     "APK Signature Scheme v2 (Verified)",
     "APK Signature Scheme v3 (Verified)"

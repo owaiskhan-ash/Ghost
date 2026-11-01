@@ -229,6 +229,20 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
     );
   }, [bulkCandidates, bulkSearch]);
 
+  const selectableBulkCandidates = useMemo(
+    () =>
+      filteredBulkCandidates.filter(
+        (c) => !existingPhoneKeys.has(normalizeDigitsKey(c.phone))
+      ),
+    [existingPhoneKeys, filteredBulkCandidates]
+  );
+
+  const allVisibleBulkSelected =
+    selectableBulkCandidates.length > 0 &&
+    selectableBulkCandidates.every((c) =>
+      bulkSelectedPhones.includes(c.phone)
+    );
+
   const menuContact = useMemo(
     () => contacts.find((c) => c.id === menuContactId) || null,
     [contacts, menuContactId]
@@ -442,19 +456,12 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
   };
 
   const toggleBulkSelectAllVisible = () => {
-    const unsavedVisible = filteredBulkCandidates.filter(
-      (c) => !existingPhoneKeys.has(normalizeDigitsKey(c.phone))
-    );
-    const allSelected =
-      unsavedVisible.length > 0 &&
-      unsavedVisible.every((c) => bulkSelectedPhones.includes(c.phone));
-
-    if (allSelected) {
-      const visibleSet = new Set(unsavedVisible.map((c) => c.phone));
+    if (allVisibleBulkSelected) {
+      const visibleSet = new Set(selectableBulkCandidates.map((c) => c.phone));
       setBulkSelectedPhones((prev) => prev.filter((p) => !visibleSet.has(p)));
     } else {
       const next = new Set(bulkSelectedPhones);
-      unsavedVisible.forEach((c) => next.add(c.phone));
+      selectableBulkCandidates.forEach((c) => next.add(c.phone));
       setBulkSelectedPhones(Array.from(next));
     }
   };
@@ -1140,35 +1147,43 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
       </section>
 
       {/* BENTO TILE 4 (12 cols): Custom Recurring Schedule Selector */}
-      <section className="col-span-12 bento-card p-3 space-y-2">
+      <section className="soft-schedule-card col-span-12 bento-card">
         <div className="flex items-center justify-between gap-2">
           <span className="soft-section-title flex items-center gap-1.5 shrink-0">
             <Repeat className="w-3.5 h-3.5 text-ghost-accent" />
             <span>Schedule</span>
           </span>
+          <span className="text-[10px] font-medium text-ghost-muted">
+            Repeat pattern
+          </span>
+        </div>
 
-          <div className="soft-segment overflow-x-auto">
-            {(
-              [
-                { id: 'once', label: 'Once' },
-                { id: 'daily', label: 'Daily' },
-                { id: 'weekly', label: 'Weekly' },
-                { id: 'monthly', label: 'Monthly' },
-                { id: 'interval', label: 'Custom' },
-              ] as const
-            ).map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => setRepeatMode(m.id)}
-                className={`soft-segment-button px-2.5 py-1 text-[10px] font-semibold shrink-0 ${
-                  repeatMode === m.id ? 'is-active' : ''
-                }`}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
+        <div
+          className="soft-schedule-grid"
+          role="group"
+          aria-label="Repeat schedule"
+        >
+          {(
+            [
+              { id: 'once', label: 'Once' },
+              { id: 'daily', label: 'Daily' },
+              { id: 'weekly', label: 'Weekly' },
+              { id: 'monthly', label: 'Monthly' },
+              { id: 'interval', label: 'Custom' },
+            ] as const
+          ).map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setRepeatMode(m.id)}
+              aria-pressed={repeatMode === m.id}
+              className={`soft-schedule-mode ${
+                m.id === 'once' ? 'is-once' : ''
+              } ${repeatMode === m.id ? 'is-active' : ''}`}
+            >
+              {m.label}
+            </button>
+          ))}
         </div>
 
         {/* Weekly Weekday Picker */}
@@ -1403,24 +1418,27 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="soft-modal w-full max-w-sm p-5 flex flex-col gap-4 max-h-[85vh]"
+            className="soft-modal soft-contact-picker-modal w-full max-w-sm"
           >
-            <div className="flex items-center justify-between pb-2 border-b border-ghost-border/25 dark:border-ghost-border">
-              <div>
-                <div className="text-sm font-bold text-ghost-ink">
-                  Bulk Import Contacts
+            <div className="soft-contact-picker-header">
+              <span className="soft-icon-well">
+                <Users />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-ghost-ink">
+                  Import contacts
                 </div>
-                <div className="text-[11px] text-ghost-muted">
-                  Select multiple phone contacts at once
+                <div className="text-[11px] text-ghost-muted mt-0.5">
+                  Choose one or multiple phone contacts
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowBulkModal(false)}
-                className="btn-outline p-1.5 rounded-lg"
-                aria-label="Close bulk import"
+                className="soft-round-button !w-9 !h-9 !basis-9"
+                aria-label="Close contact import"
               >
-                <X className="w-4 h-4" />
+                <X />
               </button>
             </div>
 
@@ -1430,9 +1448,9 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
               </div>
             ) : bulkCandidates.length > 0 ? (
               <>
-                <div className="flex items-center gap-2">
-                  <div className="bento-input flex-1 px-2.5 py-1.5 flex items-center gap-1.5">
-                    <Search className="w-3.5 h-3.5 text-ghost-muted shrink-0" />
+                <div className="soft-contact-picker-toolbar">
+                  <div className="soft-contact-picker-search bento-input">
+                    <Search className="w-4 h-4 text-ghost-muted shrink-0" />
                     <input
                       type="text"
                       placeholder="Search contacts…"
@@ -1444,13 +1462,16 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                   <button
                     type="button"
                     onClick={toggleBulkSelectAllVisible}
-                    className="btn-outline px-2.5 py-1.5 text-[11px] rounded-xl shrink-0"
+                    disabled={selectableBulkCandidates.length === 0}
+                    className={`soft-picker-action ${
+                      allVisibleBulkSelected ? 'is-active' : ''
+                    }`}
                   >
-                    Select All
+                    {allVisibleBulkSelected ? 'Clear' : 'Select all'}
                   </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5 min-h-[160px] max-h-[300px]">
+                <div className="soft-contact-picker-list">
                   {filteredBulkCandidates.map((c) => {
                     const alreadySaved = existingPhoneKeys.has(
                       normalizeDigitsKey(c.phone)
@@ -1463,20 +1484,18 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                         type="button"
                         disabled={alreadySaved}
                         onClick={() => toggleBulkCandidate(c.phone)}
-                        className={`w-full p-2.5 rounded-xl border text-left flex items-center justify-between gap-2 transition ${
+                        className={`soft-contact-picker-row ${
                           alreadySaved
-                            ? 'bg-ghost-elevated/40 border-transparent opacity-55 cursor-default'
+                            ? 'is-saved'
                             : checked
-                              ? 'bg-ghost-accent text-ghost-accentInk border-ghost-accent'
-                              : 'bg-ghost-elevated text-ghost-ink border-ghost-border/20 dark:border-ghost-border'
+                              ? 'is-selected'
+                              : ''
                         }`}
                       >
-                        <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex items-center gap-3 min-w-0">
                           <span
-                            className={`w-7 h-7 rounded-lg font-mono text-[10px] font-bold flex items-center justify-center shrink-0 ${
-                              checked
-                                ? 'bg-ghost-accentInk/15 text-ghost-accentInk'
-                                : 'bg-ghost-surface text-ghost-ink'
+                            className={`soft-contact-picker-avatar ${
+                              checked ? 'is-selected' : ''
                             }`}
                           >
                             {c.initials}
@@ -1496,15 +1515,13 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                         </div>
 
                         {alreadySaved ? (
-                          <span className="text-[10px] font-mono font-bold text-ghost-muted shrink-0">
-                            Saved
+                          <span className="soft-contact-picker-saved">
+                            Imported
                           </span>
                         ) : (
                           <span
-                            className={`w-5 h-5 rounded-md border flex items-center justify-center shrink-0 ${
-                              checked
-                                ? 'bg-ghost-accentInk text-ghost-accent border-ghost-accentInk'
-                                : 'border-ghost-muted/50'
+                            className={`soft-contact-picker-check ${
+                              checked ? 'is-selected' : ''
                             }`}
                           >
                             {checked && <Check className="w-3.5 h-3.5" />}
@@ -1563,22 +1580,34 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setShowBulkModal(false)}
-                className="btn-outline py-2.5"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={bulkSelectedPhones.length === 0}
-                onClick={handleConfirmBulkImport}
-                className="btn-solid py-2.5 disabled:opacity-40"
-              >
-                Import ({bulkSelectedPhones.length})
-              </button>
+            <div className="soft-contact-picker-footer">
+              <div className="soft-contact-picker-count">
+                <span
+                  className={`status-dot ${
+                    bulkSelectedPhones.length === 0 ? 'is-muted' : ''
+                  }`}
+                />
+                {bulkSelectedPhones.length === 0
+                  ? 'No contacts selected'
+                  : `${bulkSelectedPhones.length} selected`}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowBulkModal(false)}
+                  className="btn-outline py-2.5"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={bulkSelectedPhones.length === 0}
+                  onClick={handleConfirmBulkImport}
+                  className="btn-solid py-2.5 disabled:opacity-40"
+                >
+                  Import
+                </button>
+              </div>
             </div>
           </div>
         </div>
