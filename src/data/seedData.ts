@@ -64,6 +64,7 @@ export const INITIAL_CONTACTS: SavedContact[] = [
     name: 'Jasmine',
     phone: '+919820448210',
     initials: 'JA',
+    isFavourite: true,
   },
   {
     id: 'c-mom',

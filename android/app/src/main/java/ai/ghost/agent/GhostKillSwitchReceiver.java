@@ -12,7 +12,8 @@ public class GhostKillSwitchReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         JSONObject active = GhostTaskStore.getPendingActiveRun(context);
-        GhostTaskStore.setPendingActiveRun(context, null);
+        GhostTaskStore.clearAllActiveAndQueuedRuns(context);
+        GhostTaskScheduler.cancelScheduledCallbacks();
         context.stopService(new Intent(context, GhostForegroundService.class));
 
         if (active != null) {
@@ -22,7 +23,7 @@ public class GhostKillSwitchReceiver extends BroadcastReceiver {
                     active.optString("contactName", "Unknown"),
                     "ABORTED_KILLSWITCH",
                     active.optString("messageBody", ""),
-                    "Emergency Kill-Switch tapped via notification. Screen control yielded immediately."
+                    "Emergency Kill-Switch tapped via notification. Screen control & remaining queue aborted."
             );
         }
     }

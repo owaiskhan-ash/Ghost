@@ -11,7 +11,7 @@ export const ApkStudioModal: React.FC<ApkStudioModalProps> = ({
   meta,
   onClose,
 }) => {
-  const version = meta?.versionName || '1.2.0';
+  const version = meta?.versionName || '1.4.0';
   const fileName = meta?.fileName || `Ghost-v${version}.apk`;
   const sizeLabel = meta?.sizeBytes
     ? `${(meta.sizeBytes / 1024).toFixed(0)} KB`
