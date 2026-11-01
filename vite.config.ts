@@ -5,7 +5,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 function ghostApkServerPlugin(): Plugin {
-  const apkRelPath = 'releases/Ghost-v1.8.2.apk';
+  const apkRelPath = 'releases/Ghost-v1.8.3.apk';
   const metaRelPath = 'releases/apk-metadata.json';
 
   const attachMiddlewares = (middlewares: {
@@ -27,7 +27,7 @@ function ghostApkServerPlugin(): Plugin {
         res.setHeader('Content-Type', 'application/vnd.android.package-archive');
         res.setHeader(
           'Content-Disposition',
-          'attachment; filename="Ghost-v1.8.2.apk"'
+          'attachment; filename="Ghost-v1.8.3.apk"'
         );
         res.setHeader('Content-Length', String(stat.size));
         res.setHeader('Cache-Control', 'no-cache');
@@ -52,10 +52,10 @@ function ghostApkServerPlugin(): Plugin {
           res.end(
             JSON.stringify({
               available: true,
-              fileName: 'Ghost-v1.8.2.apk',
+              fileName: 'Ghost-v1.8.3.apk',
               packageName: 'ai.ghost.agent',
-              versionName: '1.8.2',
-              versionCode: 11,
+              versionName: '1.8.3',
+              versionCode: 12,
               minSdk: 26,
               targetSdk: 34,
               sizeBytes: buf.length,
