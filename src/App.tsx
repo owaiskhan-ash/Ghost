@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import {
+  Bird,
   Clock,
   Moon,
   Plus,
@@ -95,8 +96,11 @@ export function App() {
   const [hardwareKillSignal, setHardwareKillSignal] = useState(0);
   const [statusClock, setStatusClock] = useState('09:00');
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', darkMode ? '#252A30' : '#E0E5EC');
     syncNativeDarkMode(darkMode);
     saveToPhoneCache(CACHE_KEYS.darkMode, darkMode);
   }, [darkMode]);
@@ -177,16 +181,6 @@ export function App() {
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [nativeMode]);
-
-  const handleAddContact = (c: SavedContact) => {
-    setContacts((prev) => {
-      const targetKey = normalizeDigits(c.phone);
-      const withoutDup = prev.filter(
-        (item) => normalizeDigits(item.phone) !== targetKey
-      );
-      return [c, ...withoutDup];
-    });
-  };
 
   const handleBulkAddContacts = (items: SavedContact[]) => {
     if (items.length === 0) return;
@@ -294,14 +288,6 @@ export function App() {
     setGroups((prev) => prev.filter((g) => g.id !== id));
   };
 
-  const handleAddTemplate = (tpl: QuickTemplate) => {
-    setTemplates((prev) => [tpl, ...prev]);
-  };
-
-  const handleDeleteTemplate = (id: string) => {
-    setTemplates((prev) => prev.filter((t) => t.id !== id));
-  };
-
   const handleScheduleTask = (task: ScheduledWhatsAppTask) => {
     scheduleNativeAlarmTask(task);
     setTasks((prev) => [task, ...prev]);
@@ -382,66 +368,64 @@ export function App() {
   const activeCount = tasks.filter((t) => t.enabled).length;
 
   const androidAppContent = (
-    <div className="relative flex flex-col h-full bg-ghost-canvas text-ghost-ink">
+    <div className="soft-app relative flex flex-col h-full bg-ghost-canvas text-ghost-ink">
       {!nativeMode && (
-        <div className="hidden sm:flex px-5 pt-3 pb-1 items-center justify-between text-[11px] font-mono font-medium text-ghost-secondary shrink-0">
+        <div className="hidden sm:flex px-6 pt-3 items-center justify-between text-[10px] font-medium text-ghost-secondary shrink-0">
           <span>{statusClock}</span>
-          <div className="w-16 h-3.5 rounded-full bg-ghost-ink/15 dark:bg-white/10" />
+          <div className="w-14 h-2.5 rounded-full soft-pill !min-h-0 !p-0" />
           <div className="flex items-center gap-1.5">
             <Wifi className="w-3 h-3" />
-            <div className="w-4 h-2 rounded-sm bg-ghost-accent" />
+            <span className="status-dot" />
           </div>
         </div>
       )}
 
-      {/* Clean Minimal Header */}
-      <header className="px-4 pt-3 pb-2.5 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="w-2.5 h-2.5 rounded-full bg-ghost-accent neon-pulse" />
-          <span className="font-bold tracking-tight text-base text-ghost-ink">
-            Ghost
-          </span>
+      {/* Raised tactile app bar */}
+      <header className="soft-header">
+        <div className="soft-header-brand">
+          <div className="soft-icon-well" aria-hidden="true">
+            <Bird />
+          </div>
+          <div className="min-w-0">
+            <div className="brand-wordmark">Ghost</div>
+            <div className="text-[10px] text-ghost-muted mt-0.5">
+              WhatsApp scheduler
+            </div>
+          </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab('scheduled')}
-            className="btn-outline px-2.5 py-1 text-[11px] font-mono rounded-full"
+            className="soft-status-pill"
           >
+            <span className="status-dot" />
             {activeCount} active
           </button>
           <button
             type="button"
             onClick={() => setDarkMode((d) => !d)}
-            aria-label="Toggle theme"
-            className="btn-outline p-1.5 rounded-full"
+            aria-label="Toggle saved theme preference"
+            className="soft-round-button"
           >
-            {darkMode ? (
-              <Sun className="w-3.5 h-3.5" />
-            ) : (
-              <Moon className="w-3.5 h-3.5" />
-            )}
+            {darkMode ? <Sun /> : <Moon />}
           </button>
         </div>
       </header>
 
-      {/* Main Scrollable Bento Workspace */}
-      <main className="flex-1 overflow-y-auto px-3.5 pb-24">
+      {/* Main scrollable Soft UI workspace */}
+      <main className="soft-main flex-1 overflow-y-auto">
         {activeTab === 'new' && (
           <CommandDeck
             contacts={contacts}
             groups={groups}
-            templates={templates}
-            onAddContact={handleAddContact}
             onBulkAddContacts={handleBulkAddContacts}
             onToggleFavouriteContact={handleToggleFavouriteContact}
             onEditContact={handleEditContact}
             onDeleteContact={handleDeleteContact}
             onSaveGroup={handleSaveGroup}
             onDeleteGroup={handleDeleteGroup}
-            onAddTemplate={handleAddTemplate}
-            onDeleteTemplate={handleDeleteTemplate}
             onScheduleTask={handleScheduleTask}
             onPreviewOrSendNow={handleRunOrPreview}
           />
@@ -466,7 +450,6 @@ export function App() {
             cacheCounts={{
               contacts: contacts.length,
               groups: groups.length,
-              templates: templates.length,
               tasks: tasks.length,
               history: history.length,
             }}
@@ -475,12 +458,9 @@ export function App() {
         )}
       </main>
 
-      {/* Floating Dock */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-3.5 z-30 flex justify-center px-4">
-        <nav
-          aria-label="Primary"
-          className="pointer-events-auto flex items-center gap-1 p-1.5 rounded-2xl bg-ghost-surface/90 backdrop-blur-xl border border-ghost-border/35 dark:border-ghost-borderStrong shadow-dock"
-        >
+      {/* Floating raised navigation pill */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center px-4">
+        <nav aria-label="Primary" className="soft-dock pointer-events-auto">
           {(
             [
               { id: 'new', label: 'New', icon: Plus },
@@ -495,13 +475,9 @@ export function App() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 rounded-xl flex items-center gap-1.5 text-xs transition ${
-                  isActive
-                    ? 'bg-ghost-accent text-ghost-accentInk font-bold shadow-neonSm'
-                    : 'text-ghost-secondary hover:text-ghost-ink font-semibold'
-                }`}
+                className={`soft-nav-item ${isActive ? 'is-active' : ''}`}
               >
-                <Icon className="w-3.5 h-3.5 stroke-[2.2]" />
+                <Icon />
                 <span>{tab.label}</span>
               </button>
             );
@@ -513,27 +489,27 @@ export function App() {
 
   if (nativeMode) {
     return (
-      <div className="h-screen w-screen overflow-hidden bg-ghost-canvas">
+      <div className="soft-shell h-screen w-screen overflow-hidden">
         {androidAppContent}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-ghost-canvas text-ghost-ink sm:p-5">
+    <div className="soft-shell min-h-screen flex items-center justify-center sm:p-7">
       <div className="relative flex items-start w-full sm:w-auto min-h-screen sm:min-h-0">
-        <div className="w-full sm:w-[404px] h-screen sm:h-[790px] sm:max-h-[91vh] bg-ghost-canvas sm:border-[1.5px] sm:border-ghost-border/35 dark:sm:border-ghost-borderStrong rounded-none sm:rounded-[34px] sm:shadow-2xl overflow-hidden flex flex-col">
+        <div className="soft-phone-frame w-full sm:w-[404px] h-screen sm:h-[790px] sm:max-h-[91vh] rounded-none sm:rounded-[38px] overflow-hidden flex flex-col">
           {androidAppContent}
         </div>
 
-        {/* Simulated Volume-Down Hardware Stop Key on Desktop */}
+        {/* Simulated Volume-Down hardware stop key on desktop */}
         <div className="hidden sm:flex flex-col gap-2.5 mt-28">
-          <div className="w-1 h-9 rounded-r bg-ghost-borderStrong/50" />
-          <div className="w-1 h-11 rounded-r bg-ghost-borderStrong/50 mt-2" />
+          <div className="w-1 h-9 rounded-r bg-ghost-secondary/60" />
+          <div className="w-1 h-11 rounded-r bg-ghost-secondary/60 mt-2" />
           <button
             type="button"
             onClick={() => setHardwareKillSignal((s) => s + 1)}
-            className="w-2 h-12 rounded-r bg-ghost-accent hover:w-3 transition-all shadow-neonSm cursor-pointer"
+            className="w-2 h-12 rounded-r bg-[#D97A7A] hover:w-3 transition-all cursor-pointer"
             title="Volume-Down Stop Key"
           />
         </div>

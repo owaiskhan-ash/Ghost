@@ -192,47 +192,124 @@ export const LiveScreenStage: React.FC<LiveScreenStageProps> = ({
     stopped: 'Stopped',
   };
 
+  const sequenceSteps = [
+    'Wakes on Cue',
+    `Opens ${appLabel}`,
+    'Sends One by One',
+    'Closes WhatsApp',
+  ];
+  const activeSequenceStep =
+    phase === 'opening'
+      ? 0
+      : phase === 'typing'
+        ? 1
+        : phase === 'sending'
+          ? 2
+          : phase === 'done'
+            ? 3
+            : -1;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-3">
-      <div className="w-full max-w-sm bento-card shadow-2xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-ghost-border/25 dark:border-ghost-border flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 bg-ghost-accent text-ghost-accentInk font-mono text-[10px] font-bold uppercase rounded-md">
-              {appLabel}
-            </span>
-            <span className="text-xs font-mono font-bold text-ghost-secondary">
-              {displayTime}
-            </span>
+    <div className="soft-backdrop fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="soft-live-card w-full max-w-sm overflow-hidden p-5">
+        <div className="flex items-center justify-between gap-3 mb-5">
+          <div className="min-w-0">
+            <div className="soft-section-title">Live dispatch</div>
+            <div className="text-xs text-ghost-muted mt-1.5 truncate">
+              {appLabel} · {displayTime} · {currentStep.contactName}
+            </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="btn-outline p-1.5 rounded-lg"
+            className="soft-round-button"
+            aria-label="Close live dispatch"
           >
-            <X className="w-4 h-4" />
+            <X />
           </button>
         </div>
 
-        <div className="p-4 space-y-3">
+        <div className="soft-status-pill w-full justify-start mb-4">
+          <span
+            className={`status-dot ${phase === 'stopped' ? 'is-danger' : ''}`}
+          />
+          <span className="truncate">{statusLabel[phase]}</span>
+        </div>
+
+        <div className="space-y-3">
+          {sequenceSteps.map((label, index) => (
+            <div
+              key={label}
+              className={`soft-step-row ${
+                index === activeSequenceStep
+                  ? 'is-active'
+                  : index < activeSequenceStep
+                    ? 'is-complete'
+                    : ''
+              }`}
+            >
+              <span className="soft-step-index">
+                {String(index + 1).padStart(2, '0')}
+              </span>
+              <span className="flex-1 text-xs font-semibold">{label}</span>
+              {index < activeSequenceStep || phase === 'done' ? (
+                <Check className="w-4 h-4 text-ghost-accent" />
+              ) : index === activeSequenceStep ? (
+                <span className="status-dot" />
+              ) : null}
+            </div>
+          ))}
+        </div>
+
+        <div className="soft-message-well mt-5">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="min-w-0">
+              <div className="text-[11px] font-medium text-ghost-muted">
+                Message preview
+              </div>
+              <div className="text-xs font-semibold text-ghost-ink mt-1 truncate">
+                {currentStep.contactName} · {currentStep.contactPhone}
+              </div>
+            </div>
+            <span className="soft-icon-well !w-9 !h-9 !basis-9">
+              {sentBubbleVisible || phase === 'done' ? (
+                <CheckCheck className="text-ghost-accent" />
+              ) : (
+                <Send />
+              )}
+            </span>
+          </div>
+          <p className="text-sm leading-5 text-ghost-ink m-0 break-words">
+            {typedText ||
+              (sentBubbleVisible || phase === 'done'
+                ? currentStep.messageBody
+                : 'Preparing message…')}
+          </p>
+          <div className="text-[10px] text-ghost-muted mt-3">
+            {steps.length > 1
+              ? `Recipient ${stepIdx + 1} of ${steps.length}`
+              : task.whatsappPackage}
+          </div>
+        </div>
+
+        <div className="mt-5">
           {isRunning ? (
             <button
               type="button"
               onClick={stopNow}
-              className="btn-solid w-full py-2.5 px-3 justify-between shadow-neon"
+              className="soft-pill danger-action w-full !min-h-[48px]"
             >
-              <span className="flex items-center gap-2 truncate">
-                <span className="w-2 h-2 rounded-full bg-ghost-accentInk animate-ping shrink-0" />
-                <span className="truncate">{statusLabel[phase]}</span>
-              </span>
-              <span className="inline-flex items-center gap-1 bg-ghost-accentInk/15 px-2 py-0.5 rounded-md text-[10px] shrink-0">
-                <Square className="w-2.5 h-2.5 fill-current" /> Stop
-              </span>
+              <Square className="w-3.5 h-3.5 fill-current" />
+              Stop dispatch
             </button>
           ) : (
-            <div className="py-2 px-3 bg-ghost-elevated rounded-xl flex items-center justify-between text-xs font-semibold gap-2">
-              <span className="flex items-center gap-1.5 text-ghost-ink truncate">
-                <Check className="w-4 h-4 text-ghost-accent shrink-0" />
-                <span className="truncate">{statusLabel[phase]}</span>
+            <div className="flex items-center gap-3">
+              <span
+                className={`soft-pill flex-1 !min-h-[48px] ${
+                  phase === 'stopped' ? 'danger-action' : 'text-ghost-accent'
+                }`}
+              >
+                {phase === 'stopped' ? 'Dispatch stopped' : 'Queue completed'}
               </span>
               <button
                 type="button"
@@ -241,88 +318,13 @@ export const LiveScreenStage: React.FC<LiveScreenStageProps> = ({
                   setStepIdx(0);
                   setRunKey((k) => k + 1);
                 }}
-                className="btn-outline-accent px-2.5 py-1 text-[11px] rounded-lg shrink-0"
+                className="soft-round-button"
+                aria-label="Replay dispatch"
               >
-                <RotateCcw className="w-3 h-3" /> Replay
+                <RotateCcw />
               </button>
             </div>
           )}
-
-          {steps.length > 1 && (
-            <div className="flex items-center gap-1.5">
-              {steps.map((s, idx) => (
-                <div
-                  key={`${s.contactId}-${idx}`}
-                  className={`flex-1 h-1.5 rounded-full transition ${
-                    idx < stepIdx || phase === 'done'
-                      ? 'bg-ghost-accent'
-                      : idx === stepIdx
-                        ? 'bg-ghost-accent/45'
-                        : 'bg-ghost-border/30'
-                  }`}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Simulated WhatsApp / WA Business Chat */}
-          <div className="rounded-2xl overflow-hidden border border-ghost-border/25 dark:border-ghost-border bg-[#EFEAE2]">
-            <div
-              className={`px-3.5 py-2.5 flex items-center justify-between border-b ${
-                isBusiness
-                  ? 'bg-[#253746] text-white border-[#1B2833]'
-                  : 'bg-[#075E54] text-white border-[#054C44]'
-              }`}
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-black/25 text-white font-mono text-xs font-bold flex items-center justify-center shrink-0">
-                  {currentStep.contactInitials}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-bold truncate">
-                    {currentStep.contactName}
-                  </div>
-                  <div className="text-[10px] font-mono opacity-80 truncate">
-                    {currentStep.contactPhone}
-                  </div>
-                </div>
-              </div>
-              <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 bg-black/25 rounded-md shrink-0">
-                {task.whatsappPackage}
-              </span>
-            </div>
-
-            <div className="p-3.5 min-h-[136px] flex flex-col justify-end">
-              {(sentBubbleVisible || phase === 'done') && (
-                <div className="flex justify-end">
-                  <div className="max-w-[85%] rounded-xl px-3 py-2 text-xs shadow-sm bg-[#D9FDD3] text-[#111B21]">
-                    <div className="font-medium">{currentStep.messageBody}</div>
-                    <div className="text-[10px] text-[#667781] flex items-center justify-end gap-1 mt-0.5">
-                      <span>{displayTime}</span>
-                      <CheckCheck className="w-3.5 h-3.5 text-[#53BDEB]" />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="bg-[#F0F2F5] px-3 py-2 flex items-center gap-2 border-t border-[#D1D7DB]">
-              <div className="flex-1 bg-white border border-[#D1D7DB] rounded-xl px-3 py-1.5 text-xs min-h-[30px] flex items-center text-[#111B21]">
-                {typedText || <span className="text-[#8696A0]">Message</span>}
-              </div>
-              <div
-                className={`w-8 h-8 rounded-xl flex items-center justify-center transition ${
-                  phase === 'sending'
-                    ? 'bg-[#32FF4A] text-[#07090A] scale-105'
-                    : isBusiness
-                      ? 'bg-[#253746] text-white'
-                      : 'bg-[#00A884] text-white'
-                }`}
-              >
-                <Send className="w-3.5 h-3.5" />
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
