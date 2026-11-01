@@ -31,7 +31,7 @@ public class MainActivity extends Activity {
 
     private static final String VIRTUAL_HOST = "appassets.ghost.local";
     private static final String APP_ENTRY_URL = "https://" + VIRTUAL_HOST + "/index.html";
-    private static final String UI_PREFS = "ghost_ui_prefs_v1";
+    private static final String UI_PREFS = "ghost_ui_prefs_v2";
     private static final String KEY_DARK_MODE = "dark_mode";
     private static final int REQ_PICK_CONTACT = 2001;
 
@@ -43,7 +43,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
 
         SharedPreferences prefs = getSharedPreferences(UI_PREFS, Context.MODE_PRIVATE);
-        boolean initialDark = prefs.getBoolean(KEY_DARK_MODE, false);
+        boolean initialDark = prefs.getBoolean(KEY_DARK_MODE, true);
 
         webView = new WebView(this);
         applyThemeColors(initialDark);
@@ -52,6 +52,7 @@ public class MainActivity extends Activity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
         settings.setMediaPlaybackRequiresUserGesture(false);
@@ -104,13 +105,13 @@ public class MainActivity extends Activity {
 
     @SuppressWarnings("deprecation")
     private void applyThemeColors(boolean dark) {
-        int canvasColor = Color.parseColor(dark ? "#08080A" : "#EBEEF2");
-        int navColor = Color.parseColor(dark ? "#0F0F13" : "#F6F7F9");
+        // Dark Mode: Pitch Black (#07090A) | Light Mode: Fluorescent Green (#32FF4A)
+        int canvasColor = Color.parseColor(dark ? "#07090A" : "#32FF4A");
 
         Window window = getWindow();
         if (window != null) {
             window.setStatusBarColor(canvasColor);
-            window.setNavigationBarColor(navColor);
+            window.setNavigationBarColor(canvasColor);
             View decor = window.getDecorView();
             if (decor != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 int flags = decor.getSystemUiVisibility();

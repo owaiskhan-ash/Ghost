@@ -68,6 +68,25 @@ public final class GhostTaskStore {
         return null;
     }
 
+    public static synchronized void pauseTask(Context ctx, String taskId) {
+        if (taskId == null || taskId.isEmpty()) return;
+        JSONArray arr = getTasks(ctx);
+        for (int i = 0; i < arr.length(); i++) {
+            JSONObject obj = arr.optJSONObject(i);
+            if (obj != null && taskId.equals(obj.optString("id"))) {
+                try {
+                    obj.put("enabled", false);
+                } catch (JSONException ignored) {
+                }
+            }
+        }
+        prefs(ctx).edit().putString(KEY_TASKS, arr.toString()).apply();
+    }
+
+    public static synchronized void clearAllStoreData(Context ctx) {
+        prefs(ctx).edit().clear().apply();
+    }
+
     public static synchronized void removeTask(Context ctx, String taskId) {
         JSONArray arr = getTasks(ctx);
         JSONArray updated = new JSONArray();
