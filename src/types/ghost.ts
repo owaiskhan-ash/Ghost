@@ -41,6 +41,7 @@ export interface SentHistoryItem {
   contactName: string;
   contactPhone: string;
   messageBody: string;
+  whatsappPackage?: TargetWhatsApp;
   sentAt: string;
   status: 'SENT' | 'STOPPED';
 }
@@ -52,6 +53,7 @@ export interface AndroidDeviceStatus {
   accessibilityEnabled: boolean;
   exactAlarmAllowed: boolean;
   whatsappInstalled: boolean;
+  whatsappBusinessInstalled: boolean;
 }
 
 export interface ApkMetadata {

@@ -99,8 +99,11 @@ public class GhostAccessibilityService extends AccessibilityService {
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null || root.getPackageName() == null) return;
 
+        String expectedPkg = GhostTaskScheduler.normalizeTargetPackage(
+                activeTask.optString("whatsappPackage", GhostTaskScheduler.PKG_WHATSAPP)
+        );
         String pkg = root.getPackageName().toString();
-        if (!"com.whatsapp".equals(pkg) && !"com.whatsapp.w4b".equals(pkg)) {
+        if (!expectedPkg.equals(pkg)) {
             return;
         }
 
@@ -137,13 +140,16 @@ public class GhostAccessibilityService extends AccessibilityService {
             boolean clicked = sendNode.performAction(AccessibilityNodeInfo.ACTION_CLICK);
             if (clicked) {
                 GhostTaskStore.setPendingActiveRun(this, null);
+                String appUsed = GhostTaskScheduler.PKG_WHATSAPP_BUSINESS.equals(expectedPkg)
+                        ? "Sent via WhatsApp Business"
+                        : "Sent via WhatsApp";
                 GhostTaskStore.appendReceipt(
                         this,
                         activeTask.optString("id", "task"),
                         activeTask.optString("contactName", "Contact"),
                         "SENT",
                         desiredMessage,
-                        "Sent via WhatsApp"
+                        appUsed
                 );
                 advanceQueueOrFinish();
             }

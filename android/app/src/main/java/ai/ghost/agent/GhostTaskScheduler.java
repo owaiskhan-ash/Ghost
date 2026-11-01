@@ -10,6 +10,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -18,12 +19,21 @@ import java.util.Calendar;
 
 public final class GhostTaskScheduler {
     public static final String EXTRA_TASK_ID = "extra_task_id";
+    public static final String PKG_WHATSAPP = "com.whatsapp";
+    public static final String PKG_WHATSAPP_BUSINESS = "com.whatsapp.w4b";
     private static final long CHAT_SETTLE_DELAY_MS = 1450L;
 
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     private static PowerManager.WakeLock batchWakeLock;
 
     private GhostTaskScheduler() {}
+
+    public static String normalizeTargetPackage(String rawPkg) {
+        if (PKG_WHATSAPP_BUSINESS.equals(rawPkg)) {
+            return PKG_WHATSAPP_BUSINESS;
+        }
+        return PKG_WHATSAPP;
+    }
 
     public static long computeNextTriggerMillis(JSONObject task) {
         String time24 = task.optString("scheduledTime24", "05:00");
@@ -184,8 +194,43 @@ public final class GhostTaskScheduler {
             return;
         }
 
+        String rawPhone = step.optString("contactPhone", "").replaceAll("[^0-9]", "");
+        String msg = step.optString("messageBody", "");
+        final String targetPkg = normalizeTargetPackage(
+                step.optString("whatsappPackage", PKG_WHATSAPP)
+        );
+        final String appDisplayName = PKG_WHATSAPP_BUSINESS.equals(targetPkg)
+                ? "WhatsApp Business"
+                : "WhatsApp";
+
+        PackageManager pm = appCtx.getPackageManager();
+        // Strictly open ONLY the app selected by the user (WhatsApp -> com.whatsapp, WA Business -> com.whatsapp.w4b)
+        if (!isPackageInstalled(pm, targetPkg)) {
+            MAIN_HANDLER.post(new Runnable() {
+                @Override
+                public void run() {
+                    Toast.makeText(
+                            appCtx,
+                            appDisplayName + " is not installed on this device",
+                            Toast.LENGTH_LONG
+                    ).show();
+                }
+            });
+            GhostTaskStore.appendReceipt(
+                    appCtx,
+                    step.optString("id", "task"),
+                    step.optString("contactName", "Contact"),
+                    "APP_NOT_INSTALLED",
+                    msg,
+                    appDisplayName + " (" + targetPkg + ") is not installed"
+            );
+            scheduleNextQueuedStepAfterDelay(appCtx, 600L);
+            return;
+        }
+
         long now = System.currentTimeMillis();
         try {
+            step.put("whatsappPackage", targetPkg);
             step.put("_activatedAtMs", now);
             step.put("_readyAfterMs", now + CHAT_SETTLE_DELAY_MS);
         } catch (Exception ignored) {
@@ -203,28 +248,25 @@ public final class GhostTaskScheduler {
         }
 
         Intent fg = new Intent(appCtx, GhostForegroundService.class);
-        fg.putExtra("contactName", contactLabel);
+        fg.putExtra("contactName", contactLabel + " · " + appDisplayName);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             appCtx.startForegroundService(fg);
         } else {
             appCtx.startService(fg);
         }
 
-        String rawPhone = step.optString("contactPhone", "").replaceAll("[^0-9]", "");
-        String msg = step.optString("messageBody", "");
-        String preferredPkg = step.optString("whatsappPackage", "com.whatsapp");
-        String url = "https://api.whatsapp.com/send?phone=" + rawPhone + "&text=" + Uri.encode(msg);
-
-        Intent waIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+        // Use native whatsapp:// scheme explicitly bound to targetPkg so Android App Links
+        // can never redirect WA Business -> WhatsApp or vice versa
+        String schemeUrl = "whatsapp://send?phone=" + rawPhone + "&text=" + Uri.encode(msg);
+        Intent waIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(schemeUrl));
+        waIntent.setPackage(targetPkg);
         waIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
-        PackageManager pm = appCtx.getPackageManager();
-        if (isPackageInstalled(pm, preferredPkg)) {
-            waIntent.setPackage(preferredPkg);
-        } else if (isPackageInstalled(pm, "com.whatsapp")) {
-            waIntent.setPackage("com.whatsapp");
-        } else if (isPackageInstalled(pm, "com.whatsapp.w4b")) {
-            waIntent.setPackage("com.whatsapp.w4b");
+        if (waIntent.resolveActivity(pm) == null) {
+            String httpsUrl = "https://api.whatsapp.com/send?phone=" + rawPhone + "&text=" + Uri.encode(msg);
+            waIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(httpsUrl));
+            waIntent.setPackage(targetPkg);
+            waIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         }
 
         try {

@@ -56,6 +56,8 @@ export const LiveScreenStage: React.FC<LiveScreenStageProps> = ({
 
   const currentStep = steps[Math.min(stepIdx, steps.length - 1)];
   const displayTime = formatTime12h(task.scheduledTime24);
+  const isBusiness = task.whatsappPackage === 'com.whatsapp.w4b';
+  const appLabel = isBusiness ? 'WA Business' : 'WhatsApp';
   const isRunning =
     phase === 'opening' || phase === 'typing' || phase === 'sending';
 
@@ -70,6 +72,7 @@ export const LiveScreenStage: React.FC<LiveScreenStageProps> = ({
       contactName: currentStep.contactName,
       contactPhone: currentStep.contactPhone,
       messageBody: currentStep.messageBody,
+      whatsappPackage: task.whatsappPackage,
       sentAt: displayTime,
       status: 'STOPPED',
     });
@@ -133,6 +136,7 @@ export const LiveScreenStage: React.FC<LiveScreenStageProps> = ({
           contactName: active.contactName,
           contactPhone: active.contactPhone,
           messageBody: active.messageBody,
+          whatsappPackage: task.whatsappPackage,
           sentAt: displayTime,
           status: 'SENT',
         });
@@ -155,52 +159,57 @@ export const LiveScreenStage: React.FC<LiveScreenStageProps> = ({
   }, [stepIdx, runKey, task.id]);
 
   const progressPrefix =
-    steps.length > 1 ? `(${stepIdx + 1}/${steps.length}) ` : '';
+    steps.length > 1 ? `[${stepIdx + 1}/${steps.length}] ` : '';
 
   const statusLabel: Record<SendPhase, string> = {
-    opening: `${progressPrefix}Opening ${currentStep.contactName}…`,
+    opening: `${progressPrefix}Opening ${appLabel} → ${currentStep.contactName}…`,
     typing: `${progressPrefix}Typing message…`,
     sending: `${progressPrefix}Tapping Send…`,
     done:
       steps.length > 1
-        ? `Sent to all ${steps.length} contacts · ${displayTime}`
-        : `Sent · ${displayTime}`,
+        ? `Sent ${steps.length} via ${appLabel} · ${displayTime}`
+        : `Sent via ${appLabel} · ${displayTime}`,
     stopped: 'Stopped',
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ghost-ink/40 backdrop-blur-sm p-3">
-      <div className="w-full max-w-sm rounded-3xl bg-ghost-canvas border border-ghost-border shadow-2xl overflow-hidden">
-        <div className="px-4 py-3 bg-ghost-surface border-b border-ghost-border flex items-center justify-between">
-          <span className="text-xs font-bold text-ghost-ink">
-            Screen Control · {displayTime}
-          </span>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-[2px] p-3">
+      <div className="w-full max-w-sm box-card shadow-2xl overflow-hidden">
+        <div className="px-4 py-3 bg-ghost-surface border-b-[1.5px] border-ghost-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 bg-ghost-red text-white font-mono text-[10px] font-bold uppercase rounded-[2px]">
+              {appLabel}
+            </span>
+            <span className="text-xs font-mono font-bold text-ghost-secondary">
+              {displayTime}
+            </span>
+          </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-full bg-ghost-recessed hover:bg-ghost-border text-ghost-ink"
+            className="btn-outline p-1.5"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-4 space-y-3">
+        <div className="p-4 space-y-3 bg-ghost-canvas">
           {isRunning ? (
             <button
               type="button"
               onClick={stopNow}
-              className="w-full py-2.5 px-3.5 rounded-2xl bg-ghost-red text-white shadow-neon flex items-center justify-between text-xs font-semibold"
+              className="btn-solid w-full py-2.5 px-3 justify-between shadow-neon"
             >
-              <span className="flex items-center gap-2 truncate">
-                <span className="w-2 h-2 rounded-full bg-white animate-ping shrink-0" />
+              <span className="flex items-center gap-2 truncate normal-case">
+                <span className="w-2 h-2 bg-white animate-ping shrink-0" />
                 <span className="truncate">{statusLabel[phase]}</span>
               </span>
-              <span className="inline-flex items-center gap-1 bg-white/20 px-2 py-0.5 rounded-full text-[11px] shrink-0">
-                <Square className="w-2.5 h-2.5 fill-current" /> Stop
+              <span className="inline-flex items-center gap-1 bg-black/25 px-2 py-0.5 rounded-[2px] text-[10px] shrink-0">
+                <Square className="w-2.5 h-2.5 fill-current" /> STOP
               </span>
             </button>
           ) : (
-            <div className="py-2.5 px-3.5 rounded-2xl bg-ghost-surface border border-ghost-border flex items-center justify-between text-xs font-semibold">
+            <div className="py-2 px-3 box-card flex items-center justify-between text-xs font-semibold gap-2">
               <span className="flex items-center gap-1.5 text-ghost-ink truncate">
                 <Check className="w-4 h-4 text-ghost-red shrink-0" />
                 <span className="truncate">{statusLabel[phase]}</span>
@@ -212,9 +221,9 @@ export const LiveScreenStage: React.FC<LiveScreenStageProps> = ({
                   setStepIdx(0);
                   setRunKey((k) => k + 1);
                 }}
-                className="text-ghost-red flex items-center gap-1 shrink-0"
+                className="btn-outline-red px-2.5 py-1 text-[10px] shrink-0"
               >
-                <RotateCcw className="w-3.5 h-3.5" /> Replay
+                <RotateCcw className="w-3 h-3" /> Replay
               </button>
             </div>
           )}
@@ -224,11 +233,11 @@ export const LiveScreenStage: React.FC<LiveScreenStageProps> = ({
               {steps.map((s, idx) => (
                 <div
                   key={`${s.contactId}-${idx}`}
-                  className={`flex-1 h-1.5 rounded-full transition ${
+                  className={`flex-1 h-1.5 transition ${
                     idx < stepIdx || phase === 'done'
                       ? 'bg-ghost-red'
                       : idx === stepIdx
-                        ? 'bg-ghost-red/50'
+                        ? 'bg-ghost-red/45'
                         : 'bg-ghost-border'
                   }`}
                 />
@@ -236,26 +245,37 @@ export const LiveScreenStage: React.FC<LiveScreenStageProps> = ({
             </div>
           )}
 
-          {/* Simulated WhatsApp Chat */}
-          <div className="rounded-2xl overflow-hidden border border-ghost-border bg-[#EFEAE2]">
-            <div className="bg-[#F0F2F5] px-3.5 py-2.5 flex items-center gap-2.5 border-b border-[#D1D7DB]">
-              <div className="w-8 h-8 rounded-full bg-ghost-ink text-white text-xs font-bold flex items-center justify-center">
-                {currentStep.contactInitials}
-              </div>
-              <div>
-                <div className="text-xs font-bold text-[#111B21]">
-                  {currentStep.contactName}
+          {/* Simulated WhatsApp / WA Business Chat */}
+          <div className="rounded-[2px] overflow-hidden border-[1.5px] border-ghost-border bg-[#EFEAE2]">
+            <div
+              className={`px-3.5 py-2.5 flex items-center justify-between border-b ${
+                isBusiness
+                  ? 'bg-[#253746] text-white border-[#1B2833]'
+                  : 'bg-[#075E54] text-white border-[#054C44]'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-[2px] bg-black/25 text-white font-mono text-xs font-bold flex items-center justify-center shrink-0">
+                  {currentStep.contactInitials}
                 </div>
-                <div className="text-[10px] font-mono text-[#667781]">
-                  {currentStep.contactPhone}
+                <div className="min-w-0">
+                  <div className="text-xs font-bold truncate">
+                    {currentStep.contactName}
+                  </div>
+                  <div className="text-[10px] font-mono opacity-80 truncate">
+                    {currentStep.contactPhone}
+                  </div>
                 </div>
               </div>
+              <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 bg-black/25 rounded-[2px] shrink-0">
+                {task.whatsappPackage}
+              </span>
             </div>
 
             <div className="p-3.5 min-h-[140px] flex flex-col justify-end">
               {(sentBubbleVisible || phase === 'done') && (
                 <div className="flex justify-end">
-                  <div className="max-w-[85%] rounded-2xl px-3 py-2 text-xs shadow-sm bg-[#D9FDD3] text-[#111B21]">
+                  <div className="max-w-[85%] rounded-[2px] px-3 py-2 text-xs shadow-sm bg-[#D9FDD3] text-[#111B21]">
                     <div className="font-medium">{currentStep.messageBody}</div>
                     <div className="text-[10px] text-[#667781] flex items-center justify-end gap-1 mt-0.5">
                       <span>{displayTime}</span>
@@ -267,14 +287,16 @@ export const LiveScreenStage: React.FC<LiveScreenStageProps> = ({
             </div>
 
             <div className="bg-[#F0F2F5] px-3 py-2 flex items-center gap-2 border-t border-[#D1D7DB]">
-              <div className="flex-1 bg-white rounded-full px-3.5 py-1.5 text-xs min-h-[30px] flex items-center text-[#111B21]">
+              <div className="flex-1 bg-white border border-[#D1D7DB] rounded-[2px] px-3 py-1.5 text-xs min-h-[30px] flex items-center text-[#111B21]">
                 {typedText || <span className="text-[#8696A0]">Message</span>}
               </div>
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center transition ${
+                className={`w-8 h-8 rounded-[2px] flex items-center justify-center transition ${
                   phase === 'sending'
-                    ? 'bg-ghost-red text-white scale-110'
-                    : 'bg-[#00A884] text-white'
+                    ? 'bg-ghost-red text-white scale-105'
+                    : isBusiness
+                      ? 'bg-[#253746] text-white'
+                      : 'bg-[#00A884] text-white'
                 }`}
               >
                 <Send className="w-3.5 h-3.5" />
