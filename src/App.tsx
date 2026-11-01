@@ -403,87 +403,91 @@ export function App() {
         </div>
       )}
 
-      {/* Raised tactile app bar */}
-      <header className="soft-header">
-        <div className="soft-header-brand">
-          <div className="soft-icon-well soft-header-logo-well" aria-hidden="true">
-            <img
-              src={darkMode ? ghostLogoDark : ghostLogoLight}
-              alt=""
-              className="soft-header-logo"
-              draggable={false}
-            />
-          </div>
-          <div className="min-w-0">
-            <div className="brand-wordmark">Ghost</div>
-            <div className="text-[10px] text-ghost-muted mt-0.5">
-              WhatsApp scheduler
+      {/* Header and workspace share one scroll surface. */}
+      <main className="soft-main flex-1 overflow-y-auto">
+        <header className="soft-header">
+          <div className="soft-header-brand">
+            <div
+              className="soft-icon-well soft-header-logo-well"
+              aria-hidden="true"
+            >
+              <img
+                src={darkMode ? ghostLogoDark : ghostLogoLight}
+                alt=""
+                className="soft-header-logo"
+                draggable={false}
+              />
+            </div>
+            <div className="min-w-0">
+              <div className="brand-wordmark">Ghost</div>
+              <div className="text-[10px] text-ghost-muted mt-0.5">
+                WhatsApp scheduler
+              </div>
             </div>
           </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveTab('scheduled')}
+              className="soft-status-pill"
+            >
+              <span className="status-dot" />
+              {activeCount} active
+            </button>
+            <button
+              type="button"
+              onClick={() => setDarkMode((d) => !d)}
+              aria-label="Toggle saved theme preference"
+              className="soft-round-button"
+            >
+              {darkMode ? <Sun /> : <Moon />}
+            </button>
+          </div>
+        </header>
+
+        <div className="soft-main-content">
+          {activeTab === 'new' && (
+            <CommandDeck
+              contacts={contacts}
+              groups={groups}
+              onBulkAddContacts={handleBulkAddContacts}
+              onToggleFavouriteContact={handleToggleFavouriteContact}
+              onEditContact={handleEditContact}
+              onDeleteContact={handleDeleteContact}
+              onSaveGroup={handleSaveGroup}
+              onDeleteGroup={handleDeleteGroup}
+              onScheduleTask={handleScheduleTask}
+              onPreviewOrSendNow={handleRunOrPreview}
+            />
+          )}
+
+          {activeTab === 'scheduled' && (
+            <QueueView
+              tasks={tasks}
+              history={history}
+              onPauseOrResumeTask={handlePauseOrResumeTask}
+              onPauseOrResumeAll={handlePauseOrResumeAll}
+              onDeleteTask={handleDeleteTask}
+              onRunTask={handleRunOrPreview}
+            />
+          )}
+
+          {activeTab === 'settings' && (
+            <SetupView
+              deviceStatus={deviceStatus}
+              darkMode={darkMode}
+              onToggleDarkMode={setDarkMode}
+              cacheCounts={{
+                contacts: contacts.length,
+                groups: groups.length,
+                tasks: tasks.length,
+                history: history.length,
+              }}
+              onClearPhoneCache={handleClearPhoneCache}
+            />
+          )}
         </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => setActiveTab('scheduled')}
-            className="soft-status-pill"
-          >
-            <span className="status-dot" />
-            {activeCount} active
-          </button>
-          <button
-            type="button"
-            onClick={() => setDarkMode((d) => !d)}
-            aria-label="Toggle saved theme preference"
-            className="soft-round-button"
-          >
-            {darkMode ? <Sun /> : <Moon />}
-          </button>
-        </div>
-      </header>
-
-      {/* Main scrollable Soft UI workspace */}
-      <main className="soft-main flex-1 overflow-y-auto">
-        {activeTab === 'new' && (
-          <CommandDeck
-            contacts={contacts}
-            groups={groups}
-            onBulkAddContacts={handleBulkAddContacts}
-            onToggleFavouriteContact={handleToggleFavouriteContact}
-            onEditContact={handleEditContact}
-            onDeleteContact={handleDeleteContact}
-            onSaveGroup={handleSaveGroup}
-            onDeleteGroup={handleDeleteGroup}
-            onScheduleTask={handleScheduleTask}
-            onPreviewOrSendNow={handleRunOrPreview}
-          />
-        )}
-
-        {activeTab === 'scheduled' && (
-          <QueueView
-            tasks={tasks}
-            history={history}
-            onPauseOrResumeTask={handlePauseOrResumeTask}
-            onPauseOrResumeAll={handlePauseOrResumeAll}
-            onDeleteTask={handleDeleteTask}
-            onRunTask={handleRunOrPreview}
-          />
-        )}
-
-        {activeTab === 'settings' && (
-          <SetupView
-            deviceStatus={deviceStatus}
-            darkMode={darkMode}
-            onToggleDarkMode={setDarkMode}
-            cacheCounts={{
-              contacts: contacts.length,
-              groups: groups.length,
-              tasks: tasks.length,
-              history: history.length,
-            }}
-            onClearPhoneCache={handleClearPhoneCache}
-          />
-        )}
       </main>
 
       {/* Floating raised navigation pill */}
