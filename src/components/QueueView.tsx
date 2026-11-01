@@ -5,7 +5,6 @@ import {
   Layers,
   Pause,
   Play,
-  Repeat,
   Send,
   Trash2,
   Users,
@@ -36,272 +35,196 @@ export const QueueView: React.FC<QueueViewProps> = ({
   const pausedCount = tasks.length - activeCount;
 
   return (
-    <div className="grid grid-cols-12 gap-2.5">
-      {/* BENTO SUMMARY SWITCHER (2 Tiles) */}
+    <div className="queue-view soft-screen grid grid-cols-12">
+      {/* Tactile two-up queue summary */}
       <button
         type="button"
         onClick={() => setView('upcoming')}
-        className={`col-span-6 p-3.5 rounded-2xl border text-left transition ${
-          view === 'upcoming'
-            ? 'bg-ghost-accent text-ghost-accentInk border-ghost-accent shadow-neonSm'
-            : 'bento-card text-ghost-ink'
+        className={`soft-stat-card col-span-6 ${
+          view === 'upcoming' ? 'is-active' : ''
         }`}
       >
-        <div className="flex items-baseline justify-between">
-          <span className="font-mono text-2xl font-bold leading-none">
-            {String(tasks.length).padStart(2, '0')}
+        <div className="flex items-start justify-between gap-2">
+          <span className="soft-icon-well">
+            <Clock />
           </span>
           {pausedCount > 0 && (
-            <span
-              className={`text-[10px] font-mono font-bold ${
-                view === 'upcoming' ? 'opacity-85' : 'text-ghost-muted'
-              }`}
-            >
+            <span className="text-[10px] font-medium text-ghost-muted">
               {pausedCount} paused
             </span>
           )}
         </div>
-        <div
-          className={`text-[11px] font-bold uppercase tracking-wider mt-1.5 ${
-            view === 'upcoming' ? 'opacity-80' : 'text-ghost-secondary'
-          }`}
-        >
-          Scheduled
+        <div>
+          <div className="soft-stat-number">
+            {String(tasks.length).padStart(2, '0')}
+          </div>
+          <div className="soft-stat-label mt-2">Scheduled</div>
         </div>
       </button>
 
       <button
         type="button"
         onClick={() => setView('sent')}
-        className={`col-span-6 p-3.5 rounded-2xl border text-left transition ${
-          view === 'sent'
-            ? 'bg-ghost-accent text-ghost-accentInk border-ghost-accent shadow-neonSm'
-            : 'bento-card text-ghost-ink'
+        className={`soft-stat-card col-span-6 ${
+          view === 'sent' ? 'is-active' : ''
         }`}
       >
-        <div className="font-mono text-2xl font-bold leading-none">
-          {String(history.length).padStart(2, '0')}
-        </div>
-        <div
-          className={`text-[11px] font-bold uppercase tracking-wider mt-1.5 ${
-            view === 'sent' ? 'opacity-80' : 'text-ghost-secondary'
-          }`}
-        >
-          Delivered
+        <span className="soft-icon-well">
+          <Check />
+        </span>
+        <div>
+          <div className="soft-stat-number">
+            {String(history.length).padStart(2, '0')}
+          </div>
+          <div className="soft-stat-label mt-2">Delivered</div>
         </div>
       </button>
 
-      {/* Bulk Pause / Resume Bar when multiple schedules exist */}
       {view === 'upcoming' && tasks.length > 1 && (
-        <div className="col-span-12 flex items-center justify-between px-1 pt-0.5">
-          <span className="text-[11px] font-mono text-ghost-muted">
-            {activeCount} active · {pausedCount} paused
+        <div className="col-span-12 soft-task-row">
+          <span className="soft-icon-well">
+            {activeCount > 0 ? <Pause /> : <Play />}
           </span>
+          <div className="soft-row-copy">
+            <div className="soft-row-title">Queue controls</div>
+            <div className="soft-row-meta">
+              {activeCount} active · {pausedCount} paused
+            </div>
+          </div>
           <button
             type="button"
             onClick={() => onPauseOrResumeAll(activeCount > 0)}
-            className="btn-outline px-2.5 py-1 text-[11px] rounded-lg"
+            className={`soft-pill ${activeCount === 0 ? 'text-ghost-accent' : ''}`}
           >
-            {activeCount > 0 ? (
-              <>
-                <Pause className="w-3 h-3" /> Pause All
-              </>
-            ) : (
-              <>
-                <Play className="w-3 h-3 fill-current" /> Resume All
-              </>
-            )}
+            {activeCount > 0 ? 'Pause all' : 'Resume all'}
           </button>
         </div>
       )}
 
-      {/* BENTO LIST CARDS */}
       {view === 'upcoming' ? (
         tasks.length === 0 ? (
           <div className="col-span-12 bento-card p-10 text-center">
-            <Clock className="w-6 h-6 text-ghost-accent mx-auto mb-2" />
-            <div className="text-xs font-bold uppercase tracking-wider text-ghost-secondary">
-              No scheduled messages
-            </div>
+            <span className="soft-icon-well mx-auto mb-4">
+              <Clock />
+            </span>
+            <div className="soft-section-title">No schedules</div>
+            <p className="text-xs text-ghost-muted mt-2">
+              Your next dispatch will appear here.
+            </p>
           </div>
         ) : (
           tasks.map((task) => {
-            const isBatch = task.recipients && task.recipients.length > 1;
+            const isBatch = Boolean(
+              task.recipients && task.recipients.length > 1
+            );
             const appTag =
-              task.whatsappPackage === 'com.whatsapp.w4b' ? 'WA BIZ' : 'WA';
+              task.whatsappPackage === 'com.whatsapp.w4b'
+                ? 'WA Business'
+                : 'WhatsApp';
             const isRecurring = task.repeatMode !== 'once';
+            const RowIcon = task.groupId ? Layers : isBatch ? Users : Clock;
+            const messagePreview = isBatch
+              ? `${task.recipients?.length ?? 0} personalized messages`
+              : task.messageBody;
 
             return (
               <div
                 key={task.id}
-                className={`col-span-12 bento-card p-3.5 transition space-y-2.5 ${
-                  task.enabled ? '' : 'opacity-75'
+                className={`col-span-12 soft-task-row ${
+                  task.enabled ? '' : 'is-paused'
                 }`}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span
-                      className={`font-mono text-xs font-bold px-2.5 py-1 rounded-lg shrink-0 ${
-                        task.enabled
-                          ? 'bg-ghost-accent text-ghost-accentInk'
-                          : 'bg-ghost-elevated text-ghost-secondary'
-                      }`}
-                    >
-                      {formatTime12h(task.scheduledTime24)}
-                    </span>
+                <span className="soft-icon-well">
+                  <RowIcon />
+                </span>
 
-                    <span className="text-sm font-bold text-ghost-ink truncate flex items-center gap-1.5">
-                      {task.groupId ? (
-                        <Layers className="w-3.5 h-3.5 text-ghost-accent shrink-0" />
-                      ) : isBatch ? (
-                        <Users className="w-3.5 h-3.5 text-ghost-accent shrink-0" />
-                      ) : null}
-                      <span className="truncate">{task.contactName}</span>
-                    </span>
-                  </div>
-
-                  <span
-                    className={`px-2 py-0.5 rounded-md font-mono text-[10px] font-bold uppercase shrink-0 flex items-center gap-1 ${
-                      task.enabled
-                        ? 'bg-ghost-elevated text-ghost-accent'
-                        : 'bg-ghost-elevated text-ghost-muted'
-                    }`}
-                  >
+                <div className="soft-row-copy">
+                  <div className="soft-row-title flex items-center gap-1.5">
+                    <span className="truncate">{task.contactName}</span>
                     <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        task.enabled ? 'bg-ghost-accent' : 'bg-ghost-muted'
+                      className={`status-dot shrink-0 ${
+                        task.enabled ? '' : 'is-muted'
                       }`}
                     />
-                    {task.enabled ? 'Active' : 'Paused'}
-                  </span>
+                  </div>
+                  <div className="soft-row-meta">
+                    {formatTime12h(task.scheduledTime24)} · {appTag} ·{' '}
+                    {isRecurring ? formatRepeatSummary(task) : 'Once'} · “
+                    {messagePreview}”
+                  </div>
                 </div>
 
-                {isBatch && task.recipients ? (
-                  <div className="space-y-1 bg-ghost-elevated rounded-xl p-2.5">
-                    {task.recipients.map((r, i) => (
-                      <div
-                        key={`${r.contactId}-${i}`}
-                        className="text-xs flex items-center gap-1.5 truncate"
-                      >
-                        <span className="font-bold text-ghost-ink shrink-0">
-                          {r.contactName}:
-                        </span>
-                        <span className="text-ghost-secondary truncate">
-                          "{r.messageBody}"
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-sm text-ghost-secondary truncate">
-                    "{task.messageBody}"
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between pt-0.5 gap-2">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="px-2 py-0.5 bg-ghost-elevated rounded-md text-[10px] font-mono font-bold text-ghost-secondary shrink-0">
-                      {appTag}
-                    </span>
-                    <span className="text-xs font-mono text-ghost-muted flex items-center gap-1 truncate">
-                      {isRecurring && (
-                        <Repeat className="w-3 h-3 text-ghost-accent shrink-0" />
-                      )}
-                      <span className="truncate">
-                        {formatRepeatSummary(task)}
-                      </span>
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => onPauseOrResumeTask(task.id)}
-                      className={
-                        task.enabled
-                          ? 'btn-outline px-2.5 py-1 text-[11px] rounded-lg'
-                          : 'btn-solid px-2.5 py-1 text-[11px] rounded-lg'
-                      }
-                    >
-                      {task.enabled ? (
-                        <>
-                          <Pause className="w-3 h-3" /> Pause
-                        </>
-                      ) : (
-                        <>
-                          <Play className="w-3 h-3 fill-current" /> Resume
-                        </>
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => onRunTask(task)}
-                      className="btn-outline-accent px-2.5 py-1 text-[11px] rounded-lg"
-                      title="Send now"
-                    >
-                      <Send className="w-3 h-3" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => onDeleteTask(task.id)}
-                      className="btn-outline p-1.5 rounded-lg"
-                      aria-label="Delete"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                <div className="soft-row-actions">
+                  <button
+                    type="button"
+                    onClick={() => onPauseOrResumeTask(task.id)}
+                    className={`soft-action-circle ${
+                      task.enabled ? '' : 'is-active'
+                    }`}
+                    title={task.enabled ? 'Pause schedule' : 'Resume schedule'}
+                    aria-label={task.enabled ? 'Pause schedule' : 'Resume schedule'}
+                  >
+                    {task.enabled ? <Pause /> : <Play />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onRunTask(task)}
+                    className="soft-action-circle"
+                    title="Send now"
+                    aria-label="Send now"
+                  >
+                    <Send />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeleteTask(task.id)}
+                    className="soft-action-circle danger-action"
+                    title="Delete schedule"
+                    aria-label="Delete schedule"
+                  >
+                    <Trash2 />
+                  </button>
                 </div>
               </div>
             );
           })
         )
       ) : history.length === 0 ? (
-        <div className="col-span-12 bento-card p-10 text-center text-xs font-bold uppercase tracking-wider text-ghost-secondary">
-          No messages delivered yet
+        <div className="col-span-12 bento-card p-10 text-center">
+          <span className="soft-icon-well mx-auto mb-4">
+            <Check />
+          </span>
+          <div className="soft-section-title">No deliveries</div>
+          <p className="text-xs text-ghost-muted mt-2">
+            Completed dispatches will appear here.
+          </p>
         </div>
       ) : (
         history.map((item) => (
-          <div
-            key={item.id}
-            className="col-span-12 bento-card p-3.5 flex items-center justify-between gap-3"
-          >
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-ghost-ink truncate">
-                  {item.contactName}
-                </span>
-                <span className="text-xs font-mono text-ghost-muted">
-                  {item.sentAt}
-                </span>
-                {item.whatsappPackage && (
-                  <span className="px-1.5 py-0.5 bg-ghost-elevated rounded-md text-[9px] font-mono font-bold text-ghost-secondary">
-                    {item.whatsappPackage === 'com.whatsapp.w4b'
-                      ? 'WA BIZ'
-                      : 'WA'}
-                  </span>
-                )}
-              </div>
-              <div className="text-xs text-ghost-secondary truncate mt-0.5">
-                "{item.messageBody}"
-              </div>
-            </div>
-
+          <div key={item.id} className="col-span-12 soft-history-row">
             <span
-              className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase ${
-                item.status === 'SENT'
-                  ? 'bg-ghost-accent text-ghost-accentInk'
-                  : 'bg-ghost-elevated text-ghost-secondary'
+              className={`soft-icon-well ${
+                item.status === 'SENT' ? 'text-ghost-accent' : 'danger-action'
               }`}
             >
-              {item.status === 'SENT' ? (
-                <>
-                  <Check className="w-3 h-3" /> Sent
-                </>
-              ) : (
-                'Stopped'
-              )}
+              {item.status === 'SENT' ? <Check /> : <Pause />}
+            </span>
+            <div className="soft-row-copy">
+              <div className="soft-row-title">{item.contactName}</div>
+              <div className="soft-row-meta">
+                {item.sentAt} ·{' '}
+                {item.whatsappPackage === 'com.whatsapp.w4b'
+                  ? 'WA Business'
+                  : 'WhatsApp'}{' '}
+                · “{item.messageBody}”
+              </div>
+            </div>
+            <span
+              className={`soft-pill ${
+                item.status === 'SENT' ? 'text-ghost-accent' : 'danger-action'
+              }`}
+            >
+              {item.status === 'SENT' ? 'Sent' : 'Stopped'}
             </span>
           </div>
         ))

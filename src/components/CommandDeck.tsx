@@ -1,6 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
-  BookmarkPlus,
   Calendar,
   Check,
   Clock,
@@ -17,12 +16,10 @@ import {
   Upload,
   Users,
   X,
-  Zap,
 } from 'lucide-react';
 import type {
   BatchRecipient,
   ContactGroup,
-  QuickTemplate,
   RepeatMode,
   SavedContact,
   ScheduledWhatsAppTask,
@@ -44,16 +41,12 @@ import {
 interface CommandDeckProps {
   contacts: SavedContact[];
   groups: ContactGroup[];
-  templates: QuickTemplate[];
-  onAddContact: (c: SavedContact) => void;
   onBulkAddContacts: (items: SavedContact[]) => void;
   onToggleFavouriteContact: (id: string) => void;
   onEditContact: (id: string, name: string, phone: string) => void;
   onDeleteContact: (id: string) => void;
   onSaveGroup: (group: ContactGroup) => void;
   onDeleteGroup: (id: string) => void;
-  onAddTemplate: (tpl: QuickTemplate) => void;
-  onDeleteTemplate: (id: string) => void;
   onScheduleTask: (task: ScheduledWhatsAppTask) => void;
   onPreviewOrSendNow: (task: ScheduledWhatsAppTask) => void;
 }
@@ -148,22 +141,17 @@ const LONG_PRESS_MS = 420;
 export const CommandDeck: React.FC<CommandDeckProps> = ({
   contacts,
   groups,
-  templates,
-  onAddContact,
   onBulkAddContacts,
   onToggleFavouriteContact,
   onEditContact,
   onDeleteContact,
   onSaveGroup,
   onDeleteGroup,
-  onAddTemplate,
-  onDeleteTemplate,
   onScheduleTask,
   onPreviewOrSendNow,
 }) => {
   const nativeMode = isRunningInNativeApk();
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
-  const templateInputRef = useRef<HTMLInputElement | null>(null);
   const vcfInputRef = useRef<HTMLInputElement | null>(null);
 
   const sortedContacts = useMemo(() => {
@@ -190,16 +178,12 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
   const [bulkSearch, setBulkSearch] = useState('');
   const [bulkPasteText, setBulkPasteText] = useState('');
 
-  // Message & Quick Templates state
+  // Message composer state
   const [messageMode, setMessageMode] = useState<'same' | 'custom'>('same');
   const [messageBody, setMessageBody] = useState('');
   const [customMessages, setCustomMessages] = useState<Record<string, string>>(
     {}
   );
-  const [showAddTemplate, setShowAddTemplate] = useState(false);
-  const [newTplLabel, setNewTplLabel] = useState('');
-  const [newTplText, setNewTplText] = useState('');
-  const [templateSavedToast, setTemplateSavedToast] = useState(false);
 
   // Schedule Time, Custom Recurrence & App state
   const [time24, setTime24] = useState('09:00');
@@ -217,11 +201,6 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
     useState<TargetWhatsApp>('com.whatsapp');
   const [scheduledToast, setScheduledToast] = useState(false);
   const [validationHint, setValidationHint] = useState<string | null>(null);
-
-  // Add Contact inline form
-  const [showAddContact, setShowAddContact] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newPhone, setNewPhone] = useState('+');
 
   // Create Broadcast Group inline form
   const [showCreateGroup, setShowCreateGroup] = useState(false);
@@ -555,28 +534,6 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
     setValidationHint(null);
   };
 
-  const handleSaveContact = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newName.trim() || !newPhone.trim()) return;
-    const cleanPhone = newPhone.replace(/[^\d+]/g, '');
-    if (cleanPhone.replace(/\D/g, '').length < 5) return;
-    const created: SavedContact = {
-      id: `c-${Date.now()}`,
-      name: newName.trim(),
-      phone: cleanPhone,
-      initials: makeInitials(newName),
-    };
-    onAddContact(created);
-    setSelectedContactId(created.id);
-    if (multiMode) {
-      setSelectedMultiIds((prev) => [...prev, created.id]);
-    }
-    setNewName('');
-    setNewPhone('+');
-    setShowAddContact(false);
-    setValidationHint(null);
-  };
-
   const handleSaveEditedContact = (e: React.FormEvent) => {
     e.preventDefault();
     if (!menuContact || !editName.trim() || !editPhone.trim()) return;
@@ -619,14 +576,6 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
 
   const insertDynamicToken = (token: string) => {
     setValidationHint(null);
-    if (showAddTemplate && document.activeElement === templateInputRef.current) {
-      setNewTplText((prev) =>
-        prev && !prev.endsWith(' ') ? `${prev} ${token}` : `${prev}${token}`
-      );
-      templateInputRef.current?.focus();
-      return;
-    }
-
     const el = messageInputRef.current;
     if (el) {
       const start = el.selectionStart ?? messageBody.length;
@@ -646,78 +595,20 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
     }
   };
 
-  const handleQuickSaveCurrentAsTemplate = () => {
-    const trimmed = messageBody.trim();
-    if (!trimmed) {
-      setShowAddTemplate((v) => !v);
-      return;
-    }
-    const alreadyExists = templates.some(
-      (t) => t.text.toLowerCase() === trimmed.toLowerCase()
-    );
-    if (!alreadyExists) {
-      const shortLabel =
-        trimmed.length > 20 ? `${trimmed.slice(0, 20).trim()}…` : trimmed;
-      onAddTemplate({
-        id: `tpl-${Date.now()}`,
-        label: shortLabel,
-        text: trimmed,
-      });
-    }
-    setTemplateSavedToast(true);
-    setTimeout(() => setTemplateSavedToast(false), 1600);
-  };
-
-  const handleSaveCustomTemplateForm = (e: React.FormEvent) => {
-    e.preventDefault();
-    const text = newTplText.trim();
-    if (!text) return;
-    const label =
-      newTplLabel.trim() ||
-      (text.length > 20 ? `${text.slice(0, 20).trim()}…` : text);
-    onAddTemplate({
-      id: `tpl-${Date.now()}`,
-      label,
-      text,
-    });
-    setMessageBody(text);
-    setNewTplLabel('');
-    setNewTplText('');
-    setShowAddTemplate(false);
-    setValidationHint(null);
-  };
-
-  const applyTemplate = (tpl: QuickTemplate) => {
-    setValidationHint(null);
-    if (isMultiBatch && messageMode === 'custom') {
-      setCustomMessages((prev) => {
-        const next = { ...prev };
-        for (const c of effectiveBatchContacts) {
-          if (!next[c.id]?.trim()) {
-            next[c.id] = tpl.text;
-          }
-        }
-        return next;
-      });
-    } else {
-      setMessageBody(tpl.text);
-    }
-  };
-
   const buildTask = (): ScheduledWhatsAppTask | null => {
     if (effectiveBatchContacts.length === 0) {
       if (recipientTab === 'groups') {
         if (contacts.length === 0) {
           setRecipientTab('contacts');
-          setShowAddContact(true);
-          setValidationHint('Add or import contacts first');
+          void handleOpenBulkImport();
+          setValidationHint('Import contacts first');
         } else {
           setShowCreateGroup(true);
           setValidationHint('Create or select a broadcast group');
         }
       } else {
-        setShowAddContact(true);
-        setValidationHint('Add or import a contact first');
+        void handleOpenBulkImport();
+        setValidationHint('Import a contact first');
       }
       return null;
     }
@@ -735,7 +626,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
       const target = effectiveBatchContacts[0];
       const text = messageBody.trim();
       if (!text) {
-        setValidationHint('Enter a message or tap a quick template');
+        setValidationHint('Enter a message');
         messageInputRef.current?.focus();
         return null;
       }
@@ -771,7 +662,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
 
     const sharedText = messageBody.trim();
     if (messageMode === 'same' && !sharedText) {
-      setValidationHint('Enter a broadcast message or tap a quick template');
+      setValidationHint('Enter a broadcast message');
       messageInputRef.current?.focus();
       return null;
     }
@@ -858,21 +749,19 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
   };
 
   return (
-    <div className="grid grid-cols-12 gap-2.5">
+    <div className="command-deck soft-screen grid grid-cols-12">
       {/* BENTO TILE 1 (12 cols): Contacts, Bulk Import & Broadcast Groups */}
       <section className="col-span-12 bento-card p-3.5 space-y-2.5">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1 bg-ghost-elevated p-0.5 rounded-xl">
+          <div className="soft-segment">
             <button
               type="button"
               onClick={() => {
                 setRecipientTab('contacts');
                 setValidationHint(null);
               }}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
-                recipientTab === 'contacts'
-                  ? 'bg-ghost-accent text-ghost-accentInk shadow-neonSm'
-                  : 'text-ghost-secondary hover:text-ghost-ink'
+              className={`soft-segment-button px-3 py-1.5 text-[11px] font-semibold ${
+                recipientTab === 'contacts' ? 'is-active' : ''
               }`}
             >
               Contacts{contacts.length > 0 ? ` · ${contacts.length}` : ''}
@@ -883,10 +772,8 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                 setRecipientTab('groups');
                 setValidationHint(null);
               }}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 ${
-                recipientTab === 'groups'
-                  ? 'bg-ghost-accent text-ghost-accentInk shadow-neonSm'
-                  : 'text-ghost-secondary hover:text-ghost-ink'
+              className={`soft-segment-button px-3 py-1.5 text-[11px] font-semibold flex items-center gap-1 ${
+                recipientTab === 'groups' ? 'is-active' : ''
               }`}
             >
               <Layers className="w-3 h-3" />
@@ -901,7 +788,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                 onClick={toggleMultiMode}
                 className={
                   multiMode
-                    ? 'btn-solid px-2 py-1 text-[11px] rounded-lg'
+                    ? 'btn-solid is-active px-2 py-1 text-[11px] rounded-lg'
                     : 'btn-outline px-2 py-1 text-[11px] rounded-lg'
                 }
               >
@@ -922,26 +809,13 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
               </button>
             )}
 
-            {recipientTab === 'contacts' ? (
-              <button
-                type="button"
-                onClick={() => setShowAddContact((v) => !v)}
-                className={
-                  showAddContact
-                    ? 'btn-solid px-2.5 py-1 text-[11px] rounded-lg'
-                    : 'btn-outline px-2.5 py-1 text-[11px] rounded-lg'
-                }
-              >
-                <Plus className="w-3 h-3" />
-                Add
-              </button>
-            ) : (
+            {recipientTab === 'groups' && (
               <button
                 type="button"
                 onClick={() => setShowCreateGroup((v) => !v)}
                 className={
                   showCreateGroup
-                    ? 'btn-solid px-2.5 py-1 text-[11px] rounded-lg'
+                    ? 'btn-solid is-active px-2.5 py-1 text-[11px] rounded-lg'
                     : 'btn-outline px-2.5 py-1 text-[11px] rounded-lg'
                 }
               >
@@ -955,32 +829,25 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
         {/* CONTACTS MODE */}
         {recipientTab === 'contacts' && (
           <>
-            {(showAddContact || sortedContacts.length === 0) && (
-              <form
-                onSubmit={handleSaveContact}
-                className="p-2.5 bg-ghost-elevated/60 rounded-xl flex flex-col sm:flex-row gap-2"
-              >
-                <input
-                  type="text"
-                  placeholder="Contact name"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  className="bento-input flex-1 px-2.5 py-1.5 text-xs"
-                />
-                <input
-                  type="tel"
-                  placeholder="+CountryCodeNumber"
-                  value={newPhone}
-                  onChange={(e) => setNewPhone(e.target.value)}
-                  className="bento-input flex-1 px-2.5 py-1.5 text-xs font-mono"
-                />
+            {sortedContacts.length === 0 && (
+              <div className="soft-lock-row !min-h-[64px]">
+                <span className="soft-icon-well">
+                  <Download />
+                </span>
+                <div className="soft-row-copy">
+                  <div className="soft-row-title">Import contacts</div>
+                  <div className="soft-row-meta">
+                    Choose one or multiple contacts from your phone
+                  </div>
+                </div>
                 <button
-                  type="submit"
-                  className="btn-solid px-3.5 py-1.5 shrink-0 rounded-xl"
+                  type="button"
+                  onClick={handleOpenBulkImport}
+                  className="soft-pill text-ghost-accent"
                 >
-                  Save
+                  Import
                 </button>
-              </form>
+              </div>
             )}
 
             {sortedContacts.length > 0 && (
@@ -1070,7 +937,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             {contacts.length === 0 ? (
               <div className="p-3 bg-ghost-elevated rounded-xl flex items-center justify-between gap-2 text-xs">
                 <span className="text-ghost-secondary">
-                  Import or add contacts first.
+                  Import contacts first.
                 </span>
                 <button
                   type="button"
@@ -1213,8 +1080,9 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
       {/* BENTO TILE 2 (7 cols): Time Selector */}
       <section className="col-span-7 bento-card p-3.5 flex flex-col justify-between gap-2.5">
         <div className="flex items-center justify-between gap-1">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-ghost-secondary flex items-center gap-1">
-            <Clock className="w-3 h-3 text-ghost-accent" /> Time
+          <span className="soft-section-title flex items-center gap-1.5">
+            <Clock className="w-3.5 h-3.5 text-ghost-accent" />
+            <span>Time</span>
           </span>
 
           <div className="flex items-center gap-1">
@@ -1320,16 +1188,14 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
 
       {/* BENTO TILE 3 (5 cols): App Target */}
       <section className="col-span-5 bento-card p-3.5 flex flex-col justify-between gap-2.5">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-ghost-secondary block">
-          App
-        </span>
+        <span className="soft-section-title block">App</span>
         <div className="grid grid-cols-1 gap-2 my-auto">
           <button
             type="button"
             onClick={() => setWhatsappPackage('com.whatsapp')}
             className={
               whatsappPackage === 'com.whatsapp'
-                ? 'btn-solid py-2.5 text-xs rounded-xl'
+                ? 'btn-solid is-active py-2.5 text-xs rounded-xl'
                 : 'btn-outline py-2.5 text-xs rounded-xl'
             }
           >
@@ -1340,7 +1206,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             onClick={() => setWhatsappPackage('com.whatsapp.w4b')}
             className={
               whatsappPackage === 'com.whatsapp.w4b'
-                ? 'btn-solid py-2.5 text-xs rounded-xl'
+                ? 'btn-solid is-active py-2.5 text-xs rounded-xl'
                 : 'btn-outline py-2.5 text-xs rounded-xl'
             }
           >
@@ -1352,11 +1218,12 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
       {/* BENTO TILE 4 (12 cols): Custom Recurring Schedule Selector */}
       <section className="col-span-12 bento-card p-3 space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-ghost-secondary flex items-center gap-1 shrink-0">
-            <Repeat className="w-3 h-3 text-ghost-accent" /> Schedule
+          <span className="soft-section-title flex items-center gap-1.5 shrink-0">
+            <Repeat className="w-3.5 h-3.5 text-ghost-accent" />
+            <span>Schedule</span>
           </span>
 
-          <div className="flex items-center gap-1 overflow-x-auto">
+          <div className="soft-segment overflow-x-auto">
             {(
               [
                 { id: 'once', label: 'Once' },
@@ -1370,10 +1237,8 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                 key={m.id}
                 type="button"
                 onClick={() => setRepeatMode(m.id)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition shrink-0 ${
-                  repeatMode === m.id
-                    ? 'bg-ghost-accent text-ghost-accentInk shadow-neonSm'
-                    : 'bg-ghost-elevated text-ghost-secondary hover:text-ghost-ink'
+                className={`soft-segment-button px-2.5 py-1 text-[10px] font-semibold shrink-0 ${
+                  repeatMode === m.id ? 'is-active' : ''
                 }`}
               >
                 {m.label}
@@ -1454,61 +1319,33 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
         )}
       </section>
 
-      {/* BENTO TILE 5 (12 cols): Quick Templates, Dynamic Variables & Composer */}
+      {/* BENTO TILE 5 (12 cols): Dynamic Variables & Composer */}
       <section className="col-span-12 bento-card p-3.5 space-y-2.5">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-ghost-secondary">
-            Message
-          </span>
+          <span className="soft-section-title">Message</span>
 
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={handleQuickSaveCurrentAsTemplate}
-              className="btn-outline px-2 py-0.5 text-[10px] rounded-lg"
-            >
-              {templateSavedToast ? (
-                <>
-                  <Check className="w-3 h-3 text-ghost-accent" /> Saved
-                </>
-              ) : messageBody.trim() ? (
-                <>
-                  <BookmarkPlus className="w-3 h-3" /> Save Template
-                </>
-              ) : (
-                <>
-                  <Plus className="w-3 h-3" /> Template
-                </>
-              )}
-            </button>
-
-            {isMultiBatch && (
-              <div className="flex items-center gap-0.5 bg-ghost-elevated p-0.5 rounded-lg">
-                <button
-                  type="button"
-                  onClick={() => setMessageMode('same')}
-                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition ${
-                    messageMode === 'same'
-                      ? 'bg-ghost-accent text-ghost-accentInk'
-                      : 'text-ghost-secondary'
-                  }`}
-                >
-                  Same
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMessageMode('custom')}
-                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition ${
-                    messageMode === 'custom'
-                      ? 'bg-ghost-accent text-ghost-accentInk'
-                      : 'text-ghost-secondary'
-                  }`}
-                >
-                  Per Person
-                </button>
-              </div>
-            )}
-          </div>
+          {isMultiBatch && (
+            <div className="soft-segment">
+              <button
+                type="button"
+                onClick={() => setMessageMode('same')}
+                className={`soft-segment-button px-2.5 py-1 text-[10px] font-semibold ${
+                  messageMode === 'same' ? 'is-active' : ''
+                }`}
+              >
+                Same
+              </button>
+              <button
+                type="button"
+                onClick={() => setMessageMode('custom')}
+                className={`soft-segment-button px-2.5 py-1 text-[10px] font-semibold ${
+                  messageMode === 'custom' ? 'is-active' : ''
+                }`}
+              >
+                Per Person
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Dynamic Variable Chips ({name}, {date}, {day}) */}
@@ -1518,71 +1355,12 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
               key={tok}
               type="button"
               onClick={() => insertDynamicToken(tok)}
-              className="px-2 py-0.5 rounded-lg bg-ghost-elevated hover:bg-ghost-accent hover:text-ghost-accentInk text-[10px] font-mono font-bold text-ghost-secondary border border-ghost-border/20 dark:border-ghost-border transition"
+              className="soft-pill !min-h-[30px] !px-3 text-[10px] font-semibold"
             >
               + {tok}
             </button>
           ))}
         </div>
-
-        {/* Inline Quick Template Creator */}
-        {showAddTemplate && (
-          <form
-            onSubmit={handleSaveCustomTemplateForm}
-            className="p-2 bg-ghost-elevated/60 rounded-xl flex flex-col sm:flex-row gap-2"
-          >
-            <input
-              type="text"
-              placeholder="Title (optional)"
-              value={newTplLabel}
-              onChange={(e) => setNewTplLabel(e.target.value)}
-              className="bento-input sm:w-28 px-2.5 py-1.5 text-xs"
-            />
-            <input
-              ref={templateInputRef}
-              type="text"
-              placeholder="Template text… e.g. Hi {name}"
-              value={newTplText}
-              onChange={(e) => setNewTplText(e.target.value)}
-              className="bento-input flex-1 px-2.5 py-1.5 text-xs"
-            />
-            <button
-              type="submit"
-              className="btn-solid px-3 py-1.5 rounded-xl shrink-0"
-            >
-              Add
-            </button>
-          </form>
-        )}
-
-        {/* Saved Quick Message Templates Strip */}
-        {templates.length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-            {templates.map((tpl) => (
-              <div
-                key={tpl.id}
-                className="inline-flex items-center rounded-lg bg-ghost-elevated border border-ghost-border/20 dark:border-ghost-border hover:border-ghost-accent shrink-0 transition"
-              >
-                <button
-                  type="button"
-                  onClick={() => applyTemplate(tpl)}
-                  className="px-2.5 py-1 text-[11px] font-semibold text-ghost-ink flex items-center gap-1"
-                >
-                  <Zap className="w-3 h-3 text-ghost-accent shrink-0" />
-                  <span>{tpl.label}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDeleteTemplate(tpl.id)}
-                  aria-label="Delete template"
-                  className="pr-2 pl-0.5 py-1 text-ghost-muted hover:text-ghost-ink"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
 
         {isMultiBatch && messageMode === 'custom' ? (
           <div className="space-y-1.5">
@@ -1650,34 +1428,43 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
           </div>
         )}
 
-        <div className="grid grid-cols-5 gap-2 pt-0.5">
+        <div className="soft-dispatch-bar">
           <button
             type="button"
             onClick={handlePreview}
-            className="col-span-2 btn-outline-accent py-2.5"
+            className="soft-action-circle"
+            title={nativeMode ? 'Send now' : 'Test dispatch'}
+            aria-label={nativeMode ? 'Send now' : 'Test dispatch'}
           >
-            <Play className="w-3.5 h-3.5 fill-current" />
-            {nativeMode ? 'Send Now' : 'Test'}
+            <Play className="fill-current" />
           </button>
+
+          <div className="soft-dispatch-copy">
+            <div className="soft-dispatch-title">
+              {isMultiBatch
+                ? `${effectiveBatchContacts.length} recipient dispatch`
+                : effectiveBatchContacts[0]?.name || 'New dispatch'}
+            </div>
+            <div className="soft-dispatch-meta">
+              {whatsappPackage === 'com.whatsapp.w4b'
+                ? 'WA Business'
+                : 'WhatsApp'}{' '}
+              · {formatTime12h(time24)} · {repeatMode}
+            </div>
+          </div>
 
           <button
             type="button"
             onClick={handleSchedule}
-            className="col-span-3 btn-solid py-2.5 shadow-neon"
+            className="soft-dispatch-button"
           >
             {scheduledToast ? (
               <>
-                <Check className="w-4 h-4" />
-                Scheduled
+                <Check className="w-4 h-4" /> Scheduled
               </>
             ) : (
               <>
-                <Send className="w-3.5 h-3.5" />
-                {isMultiBatch
-                  ? `Schedule (${effectiveBatchContacts.length}) · ${formatTime12h(
-                      time24
-                    )}`
-                  : `Schedule · ${formatTime12h(time24)}`}
+                <Send className="w-4 h-4" /> Schedule
               </>
             )}
           </button>
@@ -1688,11 +1475,11 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
       {showBulkModal && (
         <div
           onClick={() => setShowBulkModal(false)}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm p-3"
+          className="soft-backdrop fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm bento-card shadow-2xl p-4 flex flex-col gap-3 max-h-[85vh]"
+            className="soft-modal w-full max-w-sm p-5 flex flex-col gap-4 max-h-[85vh]"
           >
             <div className="flex items-center justify-between pb-2 border-b border-ghost-border/25 dark:border-ghost-border">
               <div>
@@ -1880,11 +1667,11 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             setMenuContactId(null);
             setEditingInSheet(false);
           }}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/65 backdrop-blur-sm p-3"
+          className="soft-backdrop fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-xs bento-card shadow-2xl p-4 space-y-3"
+            className="soft-modal w-full max-w-xs p-5 space-y-4"
           >
             <div className="flex items-center justify-between pb-2.5 border-b border-ghost-border/25 dark:border-ghost-border">
               <div className="flex items-center gap-2.5 min-w-0">
@@ -1961,7 +1748,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                     );
                     setMenuContactId(null);
                   }}
-                  className="btn-solid w-full justify-start px-3 py-2.5"
+                  className="btn-outline danger-action w-full justify-start px-3 py-2.5"
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>Delete Contact</span>
@@ -2012,11 +1799,11 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             setMenuGroupId(null);
             setEditingGroupInSheet(false);
           }}
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/65 backdrop-blur-sm p-3"
+          className="soft-backdrop fixed inset-0 z-50 flex items-end sm:items-center justify-center p-3"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-xs bento-card shadow-2xl p-4 space-y-3"
+            className="soft-modal w-full max-w-xs p-5 space-y-4"
           >
             <div className="flex items-center justify-between pb-2.5 border-b border-ghost-border/25 dark:border-ghost-border">
               <div className="flex items-center gap-2.5 min-w-0">
@@ -2067,7 +1854,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                     onDeleteGroup(menuGroup.id);
                     setMenuGroupId(null);
                   }}
-                  className="btn-solid w-full justify-start px-3 py-2.5"
+                  className="btn-outline danger-action w-full justify-start px-3 py-2.5"
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>Delete Broadcast Group</span>

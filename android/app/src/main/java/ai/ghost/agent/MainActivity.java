@@ -117,7 +117,7 @@ public class MainActivity extends Activity {
 
     @SuppressWarnings("deprecation")
     private void applyThemeColors(boolean dark) {
-        int canvasColor = Color.parseColor(dark ? "#07090A" : "#32FF4A");
+        int canvasColor = Color.parseColor(dark ? "#252A30" : "#E0E5EC");
 
         Window window = getWindow();
         if (window != null) {
