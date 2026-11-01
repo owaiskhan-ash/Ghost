@@ -1,4 +1,4 @@
-export type RepeatMode = 'once' | 'daily';
+export type RepeatMode = 'once' | 'daily' | 'weekly' | 'monthly' | 'interval';
 
 export type TargetWhatsApp = 'com.whatsapp' | 'com.whatsapp.w4b';
 
@@ -44,8 +44,11 @@ export interface ScheduledWhatsAppTask {
   scheduledDate: string;   // "YYYY-MM-DD"
   triggerAtMillis: number;
   repeatMode: RepeatMode;
+  repeatDays?: number[];         // 0 = Sun .. 6 = Sat (when repeatMode === 'weekly')
+  repeatMonthDay?: number;       // 1 .. 31 (when repeatMode === 'monthly')
+  repeatIntervalDays?: number;   // >= 2 (when repeatMode === 'interval')
   whatsappPackage: TargetWhatsApp;
-  enabled: boolean;        // true = Active, false = Paused
+  enabled: boolean;              // true = Active, false = Paused
   lastSentAt?: string;
 }
 
@@ -66,6 +69,9 @@ export interface AndroidDeviceStatus {
   androidVersion: string;
   accessibilityEnabled: boolean;
   exactAlarmAllowed: boolean;
+  batteryUnrestricted: boolean;
+  overlayAllowed: boolean;
+  screenLockSecure: boolean; // false = None or Swipe (locked without password works!)
   whatsappInstalled: boolean;
   whatsappBusinessInstalled: boolean;
 }

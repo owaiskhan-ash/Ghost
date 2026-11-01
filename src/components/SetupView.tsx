@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import {
   Check,
   Database,
+  Lock,
+  LockOpen,
   Moon,
   ShieldCheck,
   Smartphone,
@@ -9,7 +11,10 @@ import {
   Trash2,
 } from 'lucide-react';
 import type { AndroidDeviceStatus } from '../types/ghost';
-import { openNativeSettings } from '../bridge/nativeBridge';
+import {
+  type NativeSettingsTarget,
+  openNativeSettings,
+} from '../bridge/nativeBridge';
 
 interface CacheCounts {
   contacts: number;
@@ -36,18 +41,35 @@ export const SetupView: React.FC<SetupViewProps> = ({
 }) => {
   const [confirmClear, setConfirmClear] = useState(false);
 
-  const permissions = [
+  const permissions: Array<{
+    label: string;
+    sub: string;
+    ok: boolean;
+    target: NativeSettingsTarget;
+  }> = [
     {
       label: 'Auto-Tap Send',
-      sub: 'Presses Send inside WhatsApp / WA Business',
+      sub: 'Runs 24/7 even when Ghost app is closed',
       ok: deviceStatus.accessibilityEnabled,
-      target: 'accessibility' as const,
+      target: 'accessibility',
     },
     {
-      label: 'Exact Time Alarm',
-      sub: 'Wakes phone on the exact scheduled minute',
+      label: 'Exact Time Wake',
+      sub: 'Wakes sleeping phone on exact minute',
       ok: deviceStatus.exactAlarmAllowed,
-      target: 'alarm' as const,
+      target: 'alarm',
+    },
+    {
+      label: 'Unrestricted Battery',
+      sub: 'Prevents OS from killing closed-app alarms',
+      ok: deviceStatus.batteryUnrestricted,
+      target: 'battery',
+    },
+    {
+      label: 'Appear on Top',
+      sub: 'Allows opening WhatsApp from background',
+      ok: deviceStatus.overlayAllowed,
+      target: 'overlay',
     },
   ];
 
@@ -63,6 +85,8 @@ export const SetupView: React.FC<SetupViewProps> = ({
       installed: deviceStatus.whatsappBusinessInstalled,
     },
   ];
+
+  const noPasswordLock = !deviceStatus.screenLockSecure;
 
   return (
     <div className="grid grid-cols-12 gap-2.5">
@@ -148,11 +172,54 @@ export const SetupView: React.FC<SetupViewProps> = ({
         </div>
       ))}
 
-      {/* BENTO PERMISSIONS TILE (12 cols) */}
+      {/* SCREEN LOCK WITHOUT PASSWORD STATUS TILE (12 cols) */}
+      <section className="col-span-12 bento-card p-3.5 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-ghost-elevated flex items-center justify-center shrink-0">
+            {noPasswordLock ? (
+              <LockOpen className="w-4 h-4 text-ghost-accent" />
+            ) : (
+              <Lock className="w-4 h-4 text-ghost-accent" />
+            )}
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs font-bold text-ghost-ink">
+              {noPasswordLock
+                ? 'Locked Screen (No Password): Ready'
+                : 'PIN / Password Lock Detected'}
+            </div>
+            <div className="text-[11px] text-ghost-muted mt-0.5">
+              {noPasswordLock
+                ? 'Wakes screen & auto-dismisses Swipe lock'
+                : 'Set Lock Screen to Swipe or None for locked sends'}
+            </div>
+          </div>
+        </div>
+
+        {deviceStatus.isNativeApk ? (
+          <button
+            type="button"
+            onClick={() => openNativeSettings('security')}
+            className={
+              noPasswordLock
+                ? 'btn-outline-accent px-2.5 py-1.5 text-[11px] shrink-0'
+                : 'btn-solid px-2.5 py-1.5 text-[11px] shrink-0'
+            }
+          >
+            {noPasswordLock ? 'Ready' : 'Change'}
+          </button>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase bg-ghost-accent text-ghost-accentInk px-2.5 py-1 rounded-lg shrink-0">
+            <Check className="w-3 h-3" /> Ready
+          </span>
+        )}
+      </section>
+
+      {/* BENTO CLOSED-APP & BACKGROUND PERMISSIONS TILE (12 cols) */}
       <section className="col-span-12 bento-card p-3.5 space-y-2.5">
         <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-ghost-secondary">
           <ShieldCheck className="w-3.5 h-3.5 text-ghost-accent" />
-          Android Permissions
+          Closed-App & Background Permissions
         </div>
 
         <div className="space-y-2">

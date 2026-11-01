@@ -12,7 +12,7 @@ import type {
   ScheduledWhatsAppTask,
   SentHistoryItem,
 } from '../types/ghost';
-import { formatTime12h } from '../data/seedData';
+import { formatTime12h, resolveMessageVariables } from '../data/seedData';
 import { triggerNativeEmergencyStop } from '../bridge/nativeBridge';
 
 interface LiveScreenStageProps {
@@ -31,16 +31,36 @@ export const LiveScreenStage: React.FC<LiveScreenStageProps> = ({
   externalKillSignal = 0,
 }) => {
   const steps: BatchRecipient[] = useMemo(() => {
+    const now = new Date();
     if (task.recipients && task.recipients.length > 0) {
-      return task.recipients;
+      return task.recipients.map((r) => ({
+        ...r,
+        messageBody: resolveMessageVariables(
+          r.messageBody,
+          r.contactName,
+          now
+        ),
+      }));
     }
+    const cleanPerson = (() => {
+      const openIdx = task.contactName.lastIndexOf('(');
+      const closeIdx = task.contactName.lastIndexOf(')');
+      if (openIdx >= 0 && closeIdx > openIdx + 1) {
+        return task.contactName.slice(openIdx + 1, closeIdx).trim();
+      }
+      return task.contactName;
+    })();
     return [
       {
         contactId: task.contactId,
         contactName: task.contactName,
         contactPhone: task.contactPhone,
         contactInitials: task.contactInitials,
-        messageBody: task.messageBody,
+        messageBody: resolveMessageVariables(
+          task.messageBody,
+          cleanPerson,
+          now
+        ),
       },
     ];
   }, [task]);

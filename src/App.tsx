@@ -16,13 +16,12 @@ import type {
   SentHistoryItem,
 } from './types/ghost';
 import {
-  computeTriggerMillis,
+  computeNextTaskTrigger,
   EMPTY_CONTACTS,
   EMPTY_GROUPS,
   EMPTY_HISTORY,
   EMPTY_TASKS,
   EMPTY_TEMPLATES,
-  getTodayOrTomorrowDate,
   makeInitials,
 } from './data/seedData';
 import {
@@ -32,8 +31,8 @@ import {
   getAndroidDeviceStatus,
   isRunningInNativeApk,
   loadFromPhoneCache,
-  loadNativeContactsList,
   loadNativeReceipts,
+  loadNativeTaskStates,
   pauseNativeAlarmTask,
   purgeLegacyDummyStorage,
   saveToPhoneCache,
@@ -56,8 +55,12 @@ const CACHE_KEYS = {
   darkMode: 'ghost_cache_v5_dark_mode',
 };
 
-// Purge any legacy v1-v4 dummy seed keys immediately before state initialization
 purgeLegacyDummyStorage();
+
+function normalizeDigits(phone: string): string {
+  const d = phone.replace(/\D/g, '');
+  return d.length > 10 ? d.slice(-10) : d;
+}
 
 export function App() {
   const nativeMode = isRunningInNativeApk();
@@ -112,7 +115,6 @@ export function App() {
     return () => clearInterval(id);
   }, []);
 
-  // Persist every state slice into Phone Cache (Android SharedPreferences + localStorage)
   useEffect(() => {
     saveToPhoneCache(CACHE_KEYS.contacts, contacts);
   }, [contacts]);
@@ -133,24 +135,27 @@ export function App() {
     saveToPhoneCache(CACHE_KEYS.history, history);
   }, [history]);
 
-  // Sync device contacts & native background delivery receipts
+  // Sync device permissions, background closed-app task updates & native receipts
   useEffect(() => {
     const syncNativeState = () => {
       setDeviceStatus(getAndroidDeviceStatus());
       if (!nativeMode) return;
 
-      const devContacts = loadNativeContactsList();
-      if (devContacts.length > 0) {
-        setContacts((prev) => {
-          const existingPhones = new Set(prev.map((p) => p.phone));
-          const merged = [...prev];
-          for (const dc of devContacts) {
-            if (!existingPhones.has(dc.phone)) {
-              merged.push(dc);
-            }
-          }
-          return merged;
-        });
+      const nativeTaskStates = loadNativeTaskStates();
+      if (nativeTaskStates.length > 0) {
+        const stateById = new Map(nativeTaskStates.map((s) => [s.id, s]));
+        setTasks((prev) =>
+          prev.map((t) => {
+            const ns = stateById.get(t.id);
+            if (!ns) return t;
+            return {
+              ...t,
+              enabled: Boolean(ns.enabled),
+              scheduledDate: ns.scheduledDate || t.scheduledDate,
+              triggerAtMillis: ns.triggerAtMillis || t.triggerAtMillis,
+            };
+          })
+        );
       }
 
       const nativeRcpts = loadNativeReceipts();
@@ -175,8 +180,27 @@ export function App() {
 
   const handleAddContact = (c: SavedContact) => {
     setContacts((prev) => {
-      const withoutDup = prev.filter((item) => item.phone !== c.phone);
+      const targetKey = normalizeDigits(c.phone);
+      const withoutDup = prev.filter(
+        (item) => normalizeDigits(item.phone) !== targetKey
+      );
       return [c, ...withoutDup];
+    });
+  };
+
+  const handleBulkAddContacts = (items: SavedContact[]) => {
+    if (items.length === 0) return;
+    setContacts((prev) => {
+      const seen = new Set(prev.map((p) => normalizeDigits(p.phone)));
+      const fresh: SavedContact[] = [];
+      for (const item of items) {
+        const key = normalizeDigits(item.phone);
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          fresh.push(item);
+        }
+      }
+      return fresh.length > 0 ? [...fresh, ...prev] : prev;
     });
   };
 
@@ -246,7 +270,6 @@ export function App() {
 
   const handleDeleteContact = (id: string) => {
     setContacts((prev) => prev.filter((c) => c.id !== id));
-    // Also prune deleted contact from any broadcast groups
     setGroups((prev) =>
       prev
         .map((g) => ({
@@ -287,30 +310,20 @@ export function App() {
   const resumeTaskCleanly = (
     task: ScheduledWhatsAppTask
   ): ScheduledWhatsAppTask => {
-    let nextDate = task.scheduledDate;
-    let nextTrigger = computeTriggerMillis(nextDate, task.scheduledTime24);
-    if (task.repeatMode === 'once') {
-      const [yyyy, mm, dd] = nextDate.split('-').map(Number);
-      const [hh, min] = task.scheduledTime24.split(':').map(Number);
-      const candidate = new Date(
-        yyyy || new Date().getFullYear(),
-        (mm || 1) - 1,
-        dd || 1,
-        hh || 0,
-        min || 0,
-        0,
-        0
-      );
-      if (candidate.getTime() <= Date.now()) {
-        nextDate = getTodayOrTomorrowDate(task.scheduledTime24);
-        nextTrigger = computeTriggerMillis(nextDate, task.scheduledTime24);
-      }
-    }
+    const next = computeNextTaskTrigger({
+      scheduledDate: task.scheduledDate,
+      scheduledTime24: task.scheduledTime24,
+      repeatMode: task.repeatMode,
+      repeatDays: task.repeatDays,
+      repeatMonthDay: task.repeatMonthDay,
+      repeatIntervalDays: task.repeatIntervalDays,
+    });
+
     const resumed: ScheduledWhatsAppTask = {
       ...task,
       enabled: true,
-      scheduledDate: nextDate,
-      triggerAtMillis: nextTrigger,
+      scheduledDate: next.nextDateStr,
+      triggerAtMillis: next.triggerAtMillis,
     };
     scheduleNativeAlarmTask(resumed);
     return resumed;
@@ -413,7 +426,7 @@ export function App() {
         </div>
       </header>
 
-      {/* Main Scrollable Bento Workspace (padded bottom for Floating Dock) */}
+      {/* Main Scrollable Bento Workspace */}
       <main className="flex-1 overflow-y-auto px-3.5 pb-24">
         {activeTab === 'new' && (
           <CommandDeck
@@ -421,6 +434,7 @@ export function App() {
             groups={groups}
             templates={templates}
             onAddContact={handleAddContact}
+            onBulkAddContacts={handleBulkAddContacts}
             onToggleFavouriteContact={handleToggleFavouriteContact}
             onEditContact={handleEditContact}
             onDeleteContact={handleDeleteContact}

@@ -1,15 +1,16 @@
-# Ghost (`v1.7.0`) — Scheduled WhatsApp & WA Business Sender APK
+# Ghost (`v1.8.0`) — Scheduled WhatsApp & WA Business Sender APK
 
-Clean Bento-Grid Android APK built with **Black + Fluorescent Green (`#32FF4A`)** in Dark Mode and **Fluorescent Green BG + Black (`#07090A`)** in Light Mode, featuring a **Floating Dock**, **Contact Groups & Broadcast Lists**, **Quick Message Templates**, **Pause/Resume Schedules**, and **Native Phone Cache Storage** (zero dummy data).
+Clean Bento-Grid Android APK built with **Black + Fluorescent Green (`#32FF4A`)** in Dark Mode and **Fluorescent Green BG + Black (`#07090A`)** in Light Mode, featuring **Custom Recurring Schedules**, **Template Dynamic Variables (`{name}`, `{date}`, `{day}`)**, **Bulk Contact Import (Multi-Select)**, **Closed-App Background Execution**, and **Non-Password Lock-Screen Wake & Dismiss**.
 
 ## Features
 
-- **Contact Groups & Broadcast Lists**: Build reusable broadcast groups from saved contacts (or long-press to edit/delete) and schedule either a shared message or custom per-person messages.
-- **Quick Message Templates**: Save any message as a 1-tap reusable template chip right inside the composer.
-- **Pause / Resume Scheduled Messages**: Explicitly pause or resume individual schedules (or **Pause All / Resume All**) while keeping native Android `AlarmManager` state synchronized.
-- **100% Phone Cache Persistence (Zero Dummy Data)**: All contacts, broadcast groups, templates, schedules, delivery receipts, and theme settings are stored directly in Android native `SharedPreferences` phone cache + WebView storage.
-- **Strict WhatsApp vs WA Business Routing**: Selecting **WhatsApp** strictly targets `com.whatsapp`, and selecting **WA Business** strictly targets `com.whatsapp.w4b`.
-- **Signed Release APK**: `releases/Ghost-v1.7.0.apk` (`versionCode 8`, API 26–34, `zipalign` + APK Signature Scheme v2/v3 verified).
+- **Custom Recurring Schedules**: Schedule `Once`, `Daily`, `Weekly` (any combination of `Sun–Sat`), `Monthly` (`Day 1–31`), or `Custom` (`Every N days`) — automatically rescheduled natively in Android `AlarmManager` even when Ghost is closed.
+- **Template Dynamic Variables (`{name}`, `{date}`, `{day}`)**: 1-tap variable chips resolved dynamically at the exact send moment per recipient (both in UI preview and in background native alarms).
+- **Bulk Import Phone Contacts (Multi-Select Picker)**: Multi-select phone book contacts with search + `Select All` (plus `.vcf` / CSV support).
+- **Works When Ghost App Is Closed & On Non-Password Lock Screens**:
+  - `AlarmManager.setAlarmClock` + Android 14 `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` + `GhostAccessibilityService` + `Unrestricted Battery` & `Appear on Top` permissions execute schedules reliably even when Ghost is swiped out of Recent Apps.
+  - `GhostWakeAndUnlockActivity` (`showWhenLocked`, `turnScreenOn`, `requestDismissKeyguard`) + `GhostAccessibilityService` swipe-up gesture automatically wake sleeping displays and dismiss `None` or `Swipe` (non-password) lock screens before launching `whatsapp://send`.
+- **Signed Release APK**: `releases/Ghost-v1.8.0.apk` (`versionCode 9`, API 26–34, `zipalign` + APK Signature Scheme v2/v3 verified).
 
 ## Development
 

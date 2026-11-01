@@ -6,8 +6,8 @@ cd "$ROOT_DIR"
 
 bash "$ROOT_DIR/scripts/setup-toolchain.sh"
 
-VERSION_NAME="1.7.0"
-VERSION_CODE="8"
+VERSION_NAME="1.8.0"
+VERSION_CODE="9"
 APK_FILENAME="Ghost-v${VERSION_NAME}.apk"
 
 TOOLCHAIN_DIR="${ANDROID_TOOLCHAIN_DIR:-/tmp/android-toolchain}"
@@ -27,6 +27,9 @@ rm -rf "$STAGE_DIR"
 mkdir -p "$STAGE_DIR/assets/www" "$STAGE_DIR/gen" "$STAGE_DIR/classes" "$STAGE_DIR/dex" "$ROOT_DIR/releases"
 
 echo "=== [1/7] Building Ghost v${VERSION_NAME} Frontend Assets (Vite) ==="
+if [ ! -d "$ROOT_DIR/node_modules" ]; then
+  npm install
+fi
 npm run build
 cp -r "$ROOT_DIR/dist/"* "$STAGE_DIR/assets/www/"
 
@@ -93,7 +96,7 @@ if [ ! -f "$KEYSTORE" ]; then
     -dname "CN=Ghost WhatsApp Scheduler, OU=Mobile, O=Ghost, L=Mumbai, ST=MH, C=IN"
 fi
 
-rm -f "$ROOT_DIR/releases/Ghost-v1.0.0.apk" "$ROOT_DIR/releases/Ghost-v1.1.0.apk" "$ROOT_DIR/releases/Ghost-v1.2.0.apk" "$ROOT_DIR/releases/Ghost-v1.3.0.apk" "$ROOT_DIR/releases/Ghost-v1.4.0.apk" "$ROOT_DIR/releases/Ghost-v1.5.0.apk" "$ROOT_DIR/releases/Ghost-v1.6.0.apk"
+rm -f "$ROOT_DIR/releases/Ghost-v1.0.0.apk" "$ROOT_DIR/releases/Ghost-v1.1.0.apk" "$ROOT_DIR/releases/Ghost-v1.2.0.apk" "$ROOT_DIR/releases/Ghost-v1.3.0.apk" "$ROOT_DIR/releases/Ghost-v1.4.0.apk" "$ROOT_DIR/releases/Ghost-v1.5.0.apk" "$ROOT_DIR/releases/Ghost-v1.6.0.apk" "$ROOT_DIR/releases/Ghost-v1.7.0.apk"
 OUT_APK="$ROOT_DIR/releases/${APK_FILENAME}"
 "$JAVA_BIN" -jar "$APKSIGNER_JAR" sign \
   --ks "$KEYSTORE" \

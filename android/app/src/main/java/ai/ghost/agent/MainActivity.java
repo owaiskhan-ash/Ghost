@@ -1,10 +1,12 @@
 package ai.ghost.agent;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.net.Uri;
@@ -20,12 +22,15 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 public class MainActivity extends Activity {
 
@@ -33,7 +38,9 @@ public class MainActivity extends Activity {
     private static final String APP_ENTRY_URL = "https://" + VIRTUAL_HOST + "/index.html";
     private static final String UI_PREFS = "ghost_ui_prefs_v2";
     private static final String KEY_DARK_MODE = "dark_mode";
+
     private static final int REQ_PICK_CONTACT = 2001;
+    private static final int REQ_READ_CONTACTS_BULK = 2002;
 
     private WebView webView;
 
@@ -88,6 +95,9 @@ public class MainActivity extends Activity {
 
         setContentView(webView);
         webView.loadUrl(APP_ENTRY_URL);
+
+        // Ensure all active alarms are armed in AlarmManager whenever app starts
+        GhostTaskScheduler.rescheduleAllEnabledTasks(getApplicationContext());
     }
 
     public void setDarkModeFromJs(final boolean dark) {
@@ -105,7 +115,6 @@ public class MainActivity extends Activity {
 
     @SuppressWarnings("deprecation")
     private void applyThemeColors(boolean dark) {
-        // Dark Mode: Pitch Black (#07090A) | Light Mode: Fluorescent Green (#32FF4A)
         int canvasColor = Color.parseColor(dark ? "#07090A" : "#32FF4A");
 
         Window window = getWindow();
@@ -148,6 +157,114 @@ public class MainActivity extends Activity {
                 }
             }
         });
+    }
+
+    public void requestBulkContactsFromPhone() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                        && checkSelfPermission(Manifest.permission.READ_CONTACTS)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(
+                            new String[]{Manifest.permission.READ_CONTACTS},
+                            REQ_READ_CONTACTS_BULK
+                    );
+                } else {
+                    dispatchBulkContactsToWebView();
+                }
+            }
+        });
+    }
+
+    private void dispatchBulkContactsToWebView() {
+        if (webView == null) return;
+        final JSONArray contacts = queryAllPhoneContactsJson();
+        final String js = "window.onGhostBulkContactsLoaded && window.onGhostBulkContactsLoaded("
+                + contacts.toString() + ");";
+        webView.post(new Runnable() {
+            @Override
+            public void run() {
+                webView.evaluateJavascript(js, null);
+            }
+        });
+    }
+
+    public JSONArray queryAllPhoneContactsJson() {
+        JSONArray arr = new JSONArray();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                && checkSelfPermission(Manifest.permission.READ_CONTACTS)
+                != PackageManager.PERMISSION_GRANTED) {
+            return arr;
+        }
+
+        Set<String> seenNormalizedPhones = new HashSet<>();
+        Cursor cursor = null;
+        try {
+            cursor = getContentResolver().query(
+                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                    new String[]{
+                            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                            ContactsContract.CommonDataKinds.Phone.NUMBER
+                    },
+                    null,
+                    null,
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " COLLATE NOCASE ASC"
+            );
+            if (cursor != null) {
+                int count = 0;
+                while (cursor.moveToNext() && count < 2000) {
+                    String name = cursor.getString(0);
+                    String rawNum = cursor.getString(1);
+                    if (name == null || rawNum == null) continue;
+                    String cleaned = rawNum.replaceAll("[^0-9+]", "");
+                    String digitsOnly = cleaned.replaceAll("[^0-9]", "");
+                    if (digitsOnly.length() < 5) continue;
+
+                    String dedupKey = digitsOnly.length() > 10
+                            ? digitsOnly.substring(digitsOnly.length() - 10)
+                            : digitsOnly;
+                    if (seenNormalizedPhones.contains(dedupKey)) continue;
+                    seenNormalizedPhones.add(dedupKey);
+
+                    JSONObject item = new JSONObject();
+                    item.put("name", name.trim());
+                    item.put("phone", cleaned);
+                    arr.put(item);
+                    count++;
+                }
+            }
+        } catch (Exception ignored) {
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+        return arr;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode,
+            String[] permissions,
+            int[] grantResults
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_READ_CONTACTS_BULK) {
+            if (grantResults != null
+                    && grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                dispatchBulkContactsToWebView();
+            } else if (webView != null) {
+                webView.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        webView.evaluateJavascript(
+                                "window.onGhostBulkContactsDenied && window.onGhostBulkContactsDenied();",
+                                null
+                        );
+                    }
+                });
+            }
+        }
     }
 
     @Override
