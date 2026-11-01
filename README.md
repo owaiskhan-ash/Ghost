@@ -1,9 +1,10 @@
-# Ghost (`v1.8.2`) — Scheduled WhatsApp & WA Business Sender APK
+# Ghost (`v1.8.3`) — Scheduled WhatsApp & WA Business Sender APK
 
-Clean Bento-Grid Android APK built with **Black + Fluorescent Green (`#32FF4A`)** in Dark Mode and **Fluorescent Green BG + Black (`#07090A`)** in Light Mode, featuring **Custom Recurring Schedules**, **Template Dynamic Variables (`{name}`, `{date}`, `{day}`)**, **Bulk Contact Import (Multi-Select)**, **Closed-App Background Execution**, and **Non-Password Lock-Screen Wake & Dismiss**.
+Clean Bento-Grid Android APK built with **Black + Fluorescent Green (`#32FF4A`)** in Dark Mode and **Fluorescent Green BG + Black (`#07090A`)** in Light Mode, featuring a modern **Black Pigeon launcher icon**, **Custom Recurring Schedules**, **Template Dynamic Variables (`{name}`, `{date}`, `{day}`)**, **Bulk Contact Import (Multi-Select)**, **Closed-App Background Execution**, and **Non-Password Lock-Screen Wake & Dismiss**.
 
 ## Features
 
+- **Black Pigeon App Icon**: Modern debossed black pigeon with a fluorescent-green eye and background, supplied as adaptive and legacy-density Android launcher artwork.
 - **Custom Recurring Schedules**: Schedule `Once`, `Daily`, `Weekly` (any combination of `Sun–Sat`), `Monthly` (`Day 1–31`), or `Custom` (`Every N days`) — automatically rescheduled natively in Android `AlarmManager` even when Ghost is closed.
 - **Template Dynamic Variables (`{name}`, `{date}`, `{day}`)**: 1-tap variable chips resolved dynamically at the exact send moment per recipient (both in UI preview and in background native alarms).
 - **Bulk Import Phone Contacts (Multi-Select Picker)**: Multi-select phone book contacts with search + `Select All` (plus `.vcf` / CSV support).
@@ -11,7 +12,7 @@ Clean Bento-Grid Android APK built with **Black + Fluorescent Green (`#32FF4A`)*
   - `AlarmManager.setAlarmClock` + Android 14 `FOREGROUND_SERVICE_TYPE_SPECIAL_USE` + `GhostAccessibilityService` + `Unrestricted Battery` & `Appear on Top` permissions execute schedules reliably even when Ghost is swiped out of Recent Apps.
   - `GhostWakeAndUnlockActivity` (`showWhenLocked`, `turnScreenOn`, `requestDismissKeyguard`) + `GhostAccessibilityService` swipe-up gesture automatically wake sleeping displays and dismiss `None` or `Swipe` (non-password) lock screens before launching `whatsapp://send`.
   - If a PIN, pattern, password, or biometric keyguard is actively locked at send time, Ghost does not attempt to bypass Android security; it logs the skipped send and shows an **Unlock phone to send** notification instead.
-- **Signed Release APK**: `releases/Ghost-v1.8.2.apk` (`versionCode 11`, API 26–34, `zipalign` + APK Signature Scheme v2/v3 verified).
+- **Signed Release APK**: `releases/Ghost-v1.8.3.apk` (`versionCode 12`, API 26–34, `zipalign` + APK Signature Scheme v2/v3 verified).
 
 ## Development
 
