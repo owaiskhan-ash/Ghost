@@ -178,9 +178,31 @@ export function App() {
         syncNativeState();
       }
     };
+    const onReturnToApp = () => syncNativeState();
     document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
+    window.addEventListener('focus', onReturnToApp);
+    window.addEventListener('pageshow', onReturnToApp);
+    window.addEventListener('ghost:device-status-changed', onReturnToApp);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('focus', onReturnToApp);
+      window.removeEventListener('pageshow', onReturnToApp);
+      window.removeEventListener('ghost:device-status-changed', onReturnToApp);
+    };
   }, [nativeMode]);
+
+  // Permission settings are managed by Android outside the WebView. Poll only
+  // while this screen is open so delayed OEM permission updates settle visibly.
+  useEffect(() => {
+    if (!nativeMode || activeTab !== 'settings') return;
+
+    const refreshPermissionState = () => {
+      setDeviceStatus(getAndroidDeviceStatus());
+    };
+    refreshPermissionState();
+    const id = window.setInterval(refreshPermissionState, 1500);
+    return () => window.clearInterval(id);
+  }, [activeTab, nativeMode]);
 
   const handleBulkAddContacts = (items: SavedContact[]) => {
     if (items.length === 0) return;

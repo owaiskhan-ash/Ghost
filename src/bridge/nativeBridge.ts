@@ -242,12 +242,10 @@ export function loadNativeReceipts(): SentHistoryItem[] {
       const dt = Number.isFinite(ts) && ts > 0 ? new Date(ts) : new Date();
       const h = dt.getHours();
       const m = dt.getMinutes();
-      const period = h >= 12 ? 'PM' : 'AM';
-      const h12 = h % 12 === 0 ? 12 : h % 12;
-      const sentAt = `${String(h12).padStart(2, '0')}:${String(m).padStart(
+      const sentAt = `${String(h).padStart(2, '0')}:${String(m).padStart(
         2,
         '0'
-      )} ${period}`;
+      )}`;
       const isBiz = (r.reasonDetail || '').includes('Business');
 
       return {

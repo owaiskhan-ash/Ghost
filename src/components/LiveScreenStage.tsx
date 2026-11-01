@@ -12,7 +12,7 @@ import type {
   ScheduledWhatsAppTask,
   SentHistoryItem,
 } from '../types/ghost';
-import { formatTime12h, resolveMessageVariables } from '../data/seedData';
+import { formatTime24h, resolveMessageVariables } from '../data/seedData';
 import { triggerNativeEmergencyStop } from '../bridge/nativeBridge';
 
 interface LiveScreenStageProps {
@@ -75,7 +75,7 @@ export const LiveScreenStage: React.FC<LiveScreenStageProps> = ({
   const prevKillSignal = useRef(externalKillSignal);
 
   const currentStep = steps[Math.min(stepIdx, steps.length - 1)];
-  const displayTime = formatTime12h(task.scheduledTime24);
+  const displayTime = formatTime24h(task.scheduledTime24);
   const isBusiness = task.whatsappPackage === 'com.whatsapp.w4b';
   const appLabel = isBusiness ? 'WA Business' : 'WhatsApp';
   const isRunning =

@@ -102,6 +102,24 @@ public class MainActivity extends Activity {
         GhostTaskScheduler.rescheduleAllEnabledTasks(getApplicationContext());
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (webView == null) return;
+
+        // Android permission screens live outside the WebView. Notify React after
+        // returning so each permission toggle immediately reflects the real state.
+        webView.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                webView.evaluateJavascript(
+                        "window.dispatchEvent(new Event('ghost:device-status-changed'));",
+                        null
+                );
+            }
+        }, 250);
+    }
+
     public void setDarkModeFromJs(final boolean dark) {
         getSharedPreferences(UI_PREFS, Context.MODE_PRIVATE)
                 .edit()
