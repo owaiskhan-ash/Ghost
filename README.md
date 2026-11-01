@@ -1,17 +1,18 @@
-# Ghost (`v1.8.7`) — Scheduled WhatsApp & WA Business Sender APK
+# Ghost (`v1.8.8`) — Scheduled WhatsApp & WA Business Sender APK
 
 Ghost is an Android WhatsApp scheduler with matching light and dark **Neumorphic Soft UI**, theme-aware Ghost pigeon branding, exact recurring schedules, multi-recipient dispatch, phone-contact import, and closed-app Android automation.
 
-## What’s new in v1.8.7
+## What’s new in v1.8.8
 
-- **True circular header branding**: Light and dark pigeon logos now use optimized circular assets with transparent corners plus a CSS clipping fallback.
-- **Cleaner contact import**: The picker now uses consistent rounded contact rows, inset avatars, circular selection controls, improved search, Select All/Clear, and a clear selection summary.
-- **No inconsistent picker backgrounds**: Imported, selected, and unselected contact states use the same tactile Soft UI surface and paired shadows.
-- **Non-scrolling schedule selector**: `Once` is full width, while `Daily`, `Weekly`, `Monthly`, and `Custom` use a stable 2×2 pill grid.
-- **Taller schedule card**: Recurrence controls remain fully visible without a horizontal scrollbar.
+- **New white Neumorphic app icon**: The Android launcher now uses the approved white-themed sculpted pigeon logo instead of the former fluorescent-green artwork.
+- **Adaptive Android artwork**: The new logo is packaged as the API 26+ adaptive foreground with a matching `#E0E5EC` background.
+- **Complete launcher coverage**: Updated `mdpi`, `hdpi`, `xhdpi`, `xxhdpi`, and `xxxhdpi` fallback icons keep the identity consistent across launchers and device densities.
+- **Unchanged in-app branding**: Circular light and dark header logos still switch automatically with the selected theme.
 
 ## Core features
 
+- **Polished contact import**: Clean rounded rows, inset avatars, circular selection controls, search, Select All/Clear, and a selection summary.
+- **Non-scrolling recurrence selector**: Full-width `Once` plus a stable 2×2 `Daily / Weekly / Monthly / Custom` grid.
 - **24-hour scheduling**: Select `00–23` hours and view dispatch, queue, live, and history timestamps as `HH:mm`.
 - **Exact and recurring schedules**: `Once`, `Daily`, `Weekly` (any `Sun–Sat` combination), `Monthly` (`Day 1–31`), and `Custom` (`Every N days`).
 - **Strict app targeting**: WhatsApp opens only `com.whatsapp`; WA Business opens only `com.whatsapp.w4b`.
@@ -25,13 +26,13 @@ Ghost is an Android WhatsApp scheduler with matching light and dark **Neumorphic
 
 ## Release APK
 
-- File: `releases/Ghost-v1.8.7.apk`
+- File: `releases/Ghost-v1.8.8.apk`
 - Package: `ai.ghost.agent`
-- Version: `1.8.7` (`versionCode 16`)
+- Version: `1.8.8` (`versionCode 17`)
 - Android: API 26–34
 - Signing: `zipalign` plus APK Signature Schemes v2/v3 verification
 
-> **Install note:** This build uses a newly generated release certificate. Android will not install it over the differently signed public `v1.8.6` APK; uninstall the older Ghost build first, then install `v1.8.7`.
+> **Install note:** This build uses a newly generated release certificate. Android will not install it over the differently signed public `v1.8.7` APK; uninstall the older Ghost build first, then install `v1.8.8`.
 
 ## Development
 
