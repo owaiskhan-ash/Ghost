@@ -191,7 +191,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
             <div className="text-[11px] text-ghost-muted mt-0.5">
               {noPasswordLock
                 ? 'Wakes screen & auto-dismisses Swipe lock'
-                : 'Set Lock Screen to Swipe or None for locked sends'}
+                : 'Shows a notification if locked at send time'}
             </div>
           </div>
         </div>
@@ -214,6 +214,12 @@ export const SetupView: React.FC<SetupViewProps> = ({
           </span>
         )}
       </section>
+
+      <p className="col-span-12 px-1 text-[10px] leading-4 text-ghost-muted">
+        Automatic sending works only while the screen is unlocked or the phone
+        has no PIN, pattern, or password lock. If securely locked, Ghost shows
+        a notification instead—allow notifications when prompted.
+      </p>
 
       {/* BENTO CLOSED-APP & BACKGROUND PERMISSIONS TILE (12 cols) */}
       <section className="col-span-12 bento-card p-3.5 space-y-2.5">

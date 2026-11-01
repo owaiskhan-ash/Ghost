@@ -1,5 +1,6 @@
 package ai.ghost.agent;
 
+import android.app.KeyguardManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -23,8 +24,29 @@ public class GhostAlarmReceiver extends BroadcastReceiver {
                 return;
             }
 
-            // Acquire wake locks & launch WhatsApp even when Ghost MainActivity is closed
-            GhostTaskScheduler.launchWhatsAppTaskNow(appCtx, task);
+            KeyguardManager keyguard =
+                    (KeyguardManager) appCtx.getSystemService(Context.KEYGUARD_SERVICE);
+            boolean securelyLocked = keyguard != null
+                    && keyguard.isDeviceSecure()
+                    && keyguard.isKeyguardLocked();
+
+            if (securelyLocked) {
+                // Android does not permit unattended apps to bypass a PIN, pattern,
+                // password, or biometric keyguard. Notify instead of opening WhatsApp
+                // behind the secure lock screen.
+                GhostLockedNotification.show(appCtx, task);
+                GhostTaskStore.appendReceipt(
+                        appCtx,
+                        task.optString("id", "task"),
+                        task.optString("contactName", "Contact"),
+                        "LOCKED_BY_PASSWORD",
+                        task.optString("messageBody", ""),
+                        "Not sent — phone was securely locked. A notification was shown."
+                );
+            } else {
+                // Acquire wake locks & launch WhatsApp even when Ghost MainActivity is closed.
+                GhostTaskScheduler.launchWhatsAppTaskNow(appCtx, task);
+            }
 
             if (GhostTaskScheduler.isRecurringTask(task)) {
                 long nextTrigger = GhostTaskScheduler.scheduleAlarmForTask(appCtx, task);

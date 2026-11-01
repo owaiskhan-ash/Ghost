@@ -132,6 +132,7 @@ public class GhostNativeBridge {
         try {
             JSONObject task = new JSONObject(taskJson);
             GhostTaskStore.upsertTask(activity, task);
+            activity.ensureLockedSendNotificationPermission();
             if (task.optBoolean("enabled", true)) {
                 long triggerAt = GhostTaskScheduler.scheduleAlarmForTask(activity, task);
                 JSONObject res = new JSONObject();
