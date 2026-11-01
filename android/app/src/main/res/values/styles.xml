@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="GhostAppTheme" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/ghost_canvas</item>
+        <item name="android:navigationBarColor">@color/ghost_surface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">@color/ghost_canvas</item>
+        <item name="android:colorAccent">@color/ghost_neon_red</item>
+    </style>
+</resources>
