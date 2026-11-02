@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Battery,
   Check,
@@ -7,7 +7,9 @@ import {
   Layers,
   Lock,
   LockOpen,
+  Monitor,
   Moon,
+  Power,
   ShieldCheck,
   Smartphone,
   Sun,
@@ -15,8 +17,10 @@ import {
 } from 'lucide-react';
 import type { AndroidDeviceStatus } from '../types/ghost';
 import {
+  getDesktopStatus,
   type NativeSettingsTarget,
   openNativeSettings,
+  setDesktopAutoLaunch,
 } from '../bridge/nativeBridge';
 
 interface CacheCounts {
@@ -42,53 +46,104 @@ export const SetupView: React.FC<SetupViewProps> = ({
   onClearPhoneCache,
 }) => {
   const [confirmClear, setConfirmClear] = useState(false);
+  const [autoLaunch, setAutoLaunch] = useState(false);
+  const desktopMode = Boolean(deviceStatus.isDesktopApp);
+
+  useEffect(() => {
+    if (!desktopMode) return;
+    void getDesktopStatus().then((status) => {
+      if (status) setAutoLaunch(status.autoLaunchEnabled);
+    });
+  }, [desktopMode]);
 
   const permissions: Array<{
     label: string;
     sub: string;
     ok: boolean;
     target: NativeSettingsTarget;
-  }> = [
-    {
-      label: 'Auto-Tap Send',
-      sub: 'Runs 24/7 even when Ghost app is closed',
-      ok: deviceStatus.accessibilityEnabled,
-      target: 'accessibility',
-    },
-    {
-      label: 'Exact Time Wake',
-      sub: 'Wakes sleeping phone on exact minute',
-      ok: deviceStatus.exactAlarmAllowed,
-      target: 'alarm',
-    },
-    {
-      label: 'Unrestricted Battery',
-      sub: 'Prevents OS from killing closed-app alarms',
-      ok: deviceStatus.batteryUnrestricted,
-      target: 'battery',
-    },
-    {
-      label: 'Appear on Top',
-      sub: 'Allows opening WhatsApp from background',
-      ok: deviceStatus.overlayAllowed,
-      target: 'overlay',
-    },
-  ];
+  }> = desktopMode
+    ? [
+        {
+          label: 'Windows UI Automation',
+          sub: 'Activates WhatsApp and issues the Send key',
+          ok: true,
+          target: 'accessibility',
+        },
+        {
+          label: 'Tray Scheduler',
+          sub: 'Schedules remain active while Ghost is in the tray',
+          ok: true,
+          target: 'alarm',
+        },
+        {
+          label: 'Start with Windows',
+          sub: 'Launch Ghost automatically after Windows sign-in',
+          ok: autoLaunch,
+          target: 'battery',
+        },
+        {
+          label: 'Interactive Desktop',
+          sub: 'WhatsApp must be signed in and Windows must be unlocked',
+          ok: true,
+          target: 'overlay',
+        },
+      ]
+    : [
+        {
+          label: 'Auto-Tap Send',
+          sub: 'Runs 24/7 even when Ghost app is closed',
+          ok: deviceStatus.accessibilityEnabled,
+          target: 'accessibility',
+        },
+        {
+          label: 'Exact Time Wake',
+          sub: 'Wakes sleeping phone on exact minute',
+          ok: deviceStatus.exactAlarmAllowed,
+          target: 'alarm',
+        },
+        {
+          label: 'Unrestricted Battery',
+          sub: 'Prevents OS from killing closed-app alarms',
+          ok: deviceStatus.batteryUnrestricted,
+          target: 'battery',
+        },
+        {
+          label: 'Appear on Top',
+          sub: 'Allows opening WhatsApp from background',
+          ok: deviceStatus.overlayAllowed,
+          target: 'overlay',
+        },
+      ];
 
-  const permissionIcons = [Check, Clock, Battery, Layers] as const;
+  const permissionIcons = desktopMode
+    ? ([Monitor, Clock, Power, Layers] as const)
+    : ([Check, Clock, Battery, Layers] as const);
 
-  const appTargets = [
-    {
-      name: 'WhatsApp',
-      pkg: 'com.whatsapp',
-      installed: deviceStatus.whatsappInstalled,
-    },
-    {
-      name: 'WA Business',
-      pkg: 'com.whatsapp.w4b',
-      installed: deviceStatus.whatsappBusinessInstalled,
-    },
-  ];
+  const appTargets = desktopMode
+    ? [
+        {
+          name: 'WhatsApp Desktop',
+          pkg: 'whatsapp://',
+          installed: true,
+        },
+        {
+          name: 'WA Business Web',
+          pkg: 'web.whatsapp.com',
+          installed: true,
+        },
+      ]
+    : [
+        {
+          name: 'WhatsApp',
+          pkg: 'com.whatsapp',
+          installed: deviceStatus.whatsappInstalled,
+        },
+        {
+          name: 'WA Business',
+          pkg: 'com.whatsapp.w4b',
+          installed: deviceStatus.whatsappBusinessInstalled,
+        },
+      ];
 
   const noPasswordLock = !deviceStatus.screenLockSecure;
 
@@ -142,7 +197,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
         >
           <div className="flex items-center justify-between">
             <span className="soft-icon-well">
-              <Smartphone />
+              {desktopMode ? <Monitor /> : <Smartphone />}
             </span>
             <span className="soft-pill !min-h-[28px] !px-2.5 text-[9px] uppercase tracking-[0.12em]">
               <span
@@ -164,18 +219,22 @@ export const SetupView: React.FC<SetupViewProps> = ({
 
       <section className="col-span-12 soft-lock-row">
         <span className="soft-icon-well">
-          {noPasswordLock ? <LockOpen /> : <Lock />}
+          {desktopMode ? <Lock /> : noPasswordLock ? <LockOpen /> : <Lock />}
         </span>
         <div className="soft-row-copy">
           <div className="soft-row-title">
-            {noPasswordLock
-              ? 'No-password lock is ready'
-              : 'PIN / password lock detected'}
+            {desktopMode
+              ? 'Unlocked Windows session required'
+              : noPasswordLock
+                ? 'No-password lock is ready'
+                : 'PIN / password lock detected'}
           </div>
           <div className="soft-row-meta">
-            {noPasswordLock
-              ? 'Wakes screen and dismisses Swipe lock'
-              : 'Shows a notification if locked at send time'}
+            {desktopMode
+              ? 'Ghost never bypasses Windows sign-in or the lock screen'
+              : noPasswordLock
+                ? 'Wakes screen and dismisses Swipe lock'
+                : 'Shows a notification if locked at send time'}
           </div>
         </div>
         {deviceStatus.isNativeApk ? (
@@ -194,15 +253,15 @@ export const SetupView: React.FC<SetupViewProps> = ({
       </section>
 
       <p className="col-span-12 px-3 text-[10px] leading-4 text-ghost-muted">
-        Automatic sending works only while the screen is unlocked or the phone
-        has no PIN, pattern, or password lock. If securely locked, Ghost shows
-        a notification instead—allow notifications when prompted.
+        {desktopMode
+          ? 'Desktop sending works while Windows is awake and unlocked, with WhatsApp signed in. Keep Ghost running in the system tray; no lock-screen bypass is attempted.'
+          : 'Automatic sending works only while the screen is unlocked or the phone has no PIN, pattern, or password lock. If securely locked, Ghost shows a notification instead—allow notifications when prompted.'}
       </p>
 
       <section className="col-span-12 bento-card p-5 space-y-4">
         <div className="soft-section-title flex items-center gap-2 px-1">
           <ShieldCheck className="w-4 h-4 text-ghost-accent" />
-          <span>Permissions</span>
+          <span>{desktopMode ? 'Desktop readiness' : 'Permissions'}</span>
         </div>
 
         <div className="space-y-3">
@@ -218,7 +277,22 @@ export const SetupView: React.FC<SetupViewProps> = ({
                   <div className="soft-row-meta">{item.sub}</div>
                 </div>
 
-                {deviceStatus.isNativeApk ? (
+                {desktopMode && index === 2 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void setDesktopAutoLaunch(!autoLaunch).then(setAutoLaunch);
+                    }}
+                    className={`soft-toggle ${autoLaunch ? 'is-active' : ''}`}
+                    aria-pressed={autoLaunch}
+                    aria-label="Start Ghost with Windows"
+                    title="Start Ghost automatically after sign-in"
+                  >
+                    <span className="soft-toggle-knob">
+                      {autoLaunch && <Check />}
+                    </span>
+                  </button>
+                ) : deviceStatus.isNativeApk ? (
                   <button
                     type="button"
                     onClick={() => openNativeSettings(item.target)}
@@ -248,7 +322,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
         <div className="flex items-center justify-between gap-3 px-1">
           <div className="soft-section-title flex items-center gap-2">
             <Database className="w-4 h-4 text-ghost-accent" />
-            <span>Phone cache</span>
+            <span>{desktopMode ? 'Local app data' : 'Phone cache'}</span>
           </div>
 
           {!confirmClear ? (

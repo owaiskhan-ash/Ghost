@@ -65,6 +65,7 @@ export interface SentHistoryItem {
 
 export interface AndroidDeviceStatus {
   isNativeApk: boolean;
+  isDesktopApp?: boolean;
   deviceModel: string;
   androidVersion: string;
   accessibilityEnabled: boolean;

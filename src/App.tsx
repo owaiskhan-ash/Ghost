@@ -4,6 +4,7 @@ import {
   Moon,
   Plus,
   SlidersHorizontal,
+  Square,
   Sun,
   Wifi,
 } from 'lucide-react';
@@ -29,7 +30,9 @@ import {
   clearAllPhoneCache,
   executeNativeTaskNow,
   getAndroidDeviceStatus,
+  isRunningInDesktopApp,
   isRunningInNativeApk,
+  loadDesktopReceipts,
   loadFromPhoneCache,
   loadNativeReceipts,
   loadNativeTaskStates,
@@ -37,7 +40,10 @@ import {
   purgeLegacyDummyStorage,
   saveToPhoneCache,
   scheduleNativeAlarmTask,
+  subscribeDesktopEvents,
+  syncDesktopTasks,
   syncNativeDarkMode,
+  triggerNativeEmergencyStop,
 } from './bridge/nativeBridge';
 import { CommandDeck } from './components/CommandDeck';
 import { QueueView } from './components/QueueView';
@@ -66,6 +72,12 @@ function normalizeDigits(phone: string): string {
 
 export function App() {
   const nativeMode = isRunningInNativeApk();
+  const desktopMode = isRunningInDesktopApp();
+  const desktopLayout =
+    desktopMode ||
+    (!nativeMode &&
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('desktop') === '1');
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('new');
   const [darkMode, setDarkMode] = useState<boolean>(() =>
@@ -191,6 +203,54 @@ export function App() {
       window.removeEventListener('ghost:device-status-changed', onReturnToApp);
     };
   }, [nativeMode]);
+
+  // Keep the Electron tray scheduler and the visible queue in sync.
+  useEffect(() => {
+    if (!desktopMode) return;
+
+    const mergeReceipt = (receipt: SentHistoryItem) => {
+      setHistory((prev) =>
+        prev.some((item) => item.id === receipt.id)
+          ? prev
+          : [receipt, ...prev]
+      );
+    };
+
+    const unsubscribe = subscribeDesktopEvents({
+      onReceipt: mergeReceipt,
+      onTaskState: (state) => {
+        setTasks((prev) =>
+          prev.map((task) =>
+            task.id === state.id
+              ? {
+                  ...task,
+                  enabled: state.enabled,
+                  scheduledDate: state.scheduledDate || task.scheduledDate,
+                  triggerAtMillis:
+                    state.triggerAtMillis || task.triggerAtMillis,
+                  lastSentAt: state.lastSentAt || task.lastSentAt,
+                }
+              : task
+          )
+        );
+      },
+    });
+
+    void loadDesktopReceipts().then((receipts) => {
+      if (receipts.length === 0) return;
+      setHistory((prev) => {
+        const existing = new Set(prev.map((item) => item.id));
+        const fresh = receipts.filter((item) => !existing.has(item.id));
+        return fresh.length > 0 ? [...fresh, ...prev] : prev;
+      });
+    });
+
+    return unsubscribe;
+  }, [desktopMode]);
+
+  useEffect(() => {
+    if (desktopMode) syncDesktopTasks(tasks);
+  }, [desktopMode, tasks]);
 
   // Permission settings are managed by Android outside the WebView. Poll only
   // while this screen is open so delayed OEM permission updates settle visibly.
@@ -369,7 +429,7 @@ export function App() {
   };
 
   const handleRunOrPreview = (task: ScheduledWhatsAppTask) => {
-    if (nativeMode) {
+    if (nativeMode || desktopMode) {
       executeNativeTaskNow(task);
     } else {
       setPreviewTask(task);
@@ -390,9 +450,13 @@ export function App() {
 
   const activeCount = tasks.filter((t) => t.enabled).length;
 
-  const androidAppContent = (
-    <div className="soft-app relative flex flex-col h-full bg-ghost-canvas text-ghost-ink">
-      {!nativeMode && (
+  const appContent = (
+    <div
+      className={`soft-app relative flex flex-col h-full bg-ghost-canvas text-ghost-ink ${
+        desktopLayout ? 'desktop-mode' : ''
+      }`}
+    >
+      {!nativeMode && !desktopLayout && (
         <div className="hidden sm:flex px-6 pt-3 items-center justify-between text-[10px] font-medium text-ghost-secondary shrink-0">
           <span>{statusClock}</span>
           <div className="w-14 h-2.5 rounded-full soft-pill !min-h-0 !p-0" />
@@ -421,12 +485,23 @@ export function App() {
             <div className="min-w-0">
               <div className="brand-wordmark">Ghost</div>
               <div className="text-[10px] text-ghost-muted mt-0.5">
-                WhatsApp scheduler
+                {desktopMode ? 'Windows WhatsApp scheduler' : 'WhatsApp scheduler'}
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {desktopMode && (
+              <button
+                type="button"
+                onClick={triggerNativeEmergencyStop}
+                className="soft-status-pill danger-action"
+                title="Stop the current desktop dispatch"
+              >
+                <Square className="w-3 h-3 fill-current" />
+                Stop
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setActiveTab('scheduled')}
@@ -519,10 +594,10 @@ export function App() {
     </div>
   );
 
-  if (nativeMode) {
+  if (nativeMode || desktopLayout) {
     return (
       <div className="soft-shell h-screen w-screen overflow-hidden">
-        {androidAppContent}
+        {appContent}
       </div>
     );
   }
@@ -531,7 +606,7 @@ export function App() {
     <div className="soft-shell min-h-screen flex items-center justify-center sm:p-7">
       <div className="relative flex items-start w-full sm:w-auto min-h-screen sm:min-h-0">
         <div className="soft-phone-frame w-full sm:w-[404px] h-screen sm:h-[790px] sm:max-h-[91vh] rounded-none sm:rounded-[38px] overflow-hidden flex flex-col">
-          {androidAppContent}
+          {appContent}
         </div>
 
         {/* Simulated Volume-Down hardware stop key on desktop */}

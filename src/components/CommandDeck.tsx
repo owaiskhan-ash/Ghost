@@ -35,6 +35,7 @@ import {
 } from '../data/seedData';
 import {
   fetchPhoneContactsForBulkImport,
+  isRunningInDesktopApp,
   isRunningInNativeApk,
 } from '../bridge/nativeBridge';
 
@@ -141,6 +142,8 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
   onPreviewOrSendNow,
 }) => {
   const nativeMode = isRunningInNativeApk();
+  const desktopMode = isRunningInDesktopApp();
+  const automationMode = nativeMode || desktopMode;
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const vcfInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -729,7 +732,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
   return (
     <div className="command-deck soft-screen grid grid-cols-12">
       {/* BENTO TILE 1 (12 cols): Contacts, Bulk Import & Broadcast Groups */}
-      <section className="col-span-12 bento-card p-3.5 space-y-2.5">
+      <section className="desktop-contact-card col-span-12 bento-card p-3.5 space-y-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="soft-segment">
             <button
@@ -815,7 +818,9 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                 <div className="soft-row-copy">
                   <div className="soft-row-title">Import contacts</div>
                   <div className="soft-row-meta">
-                    Choose one or multiple contacts from your phone
+                    {desktopMode
+                      ? 'Import one or multiple contacts from VCF or CSV'
+                      : 'Choose one or multiple contacts from your phone'}
                   </div>
                 </div>
                 <button
@@ -1141,7 +1146,7 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
       </section>
 
       {/* BENTO TILE 4 (12 cols): Custom Recurring Schedule Selector */}
-      <section className="soft-schedule-card col-span-12 bento-card">
+      <section className="desktop-schedule-card soft-schedule-card col-span-12 bento-card">
         <div className="flex items-center justify-between gap-2">
           <span className="soft-section-title flex items-center gap-1.5 shrink-0">
             <Repeat className="w-3.5 h-3.5 text-ghost-accent" />
@@ -1366,8 +1371,8 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
             type="button"
             onClick={handlePreview}
             className="soft-action-circle"
-            title={nativeMode ? 'Send now' : 'Test dispatch'}
-            aria-label={nativeMode ? 'Send now' : 'Test dispatch'}
+            title={automationMode ? 'Send now' : 'Test dispatch'}
+            aria-label={automationMode ? 'Send now' : 'Test dispatch'}
           >
             <Play className="fill-current" />
           </button>
@@ -1423,7 +1428,9 @@ export const CommandDeck: React.FC<CommandDeckProps> = ({
                   Import contacts
                 </div>
                 <div className="text-[11px] text-ghost-muted mt-0.5">
-                  Choose one or multiple phone contacts
+                  {desktopMode
+                    ? 'Import VCF, CSV, or pasted contacts'
+                    : 'Choose one or multiple phone contacts'}
                 </div>
               </div>
               <button

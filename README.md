@@ -1,38 +1,53 @@
-# Ghost (`v1.8.9`) — Scheduled WhatsApp & WA Business Sender APK
+# Ghost (`v1.9.0`) — Windows & Android WhatsApp Scheduler
 
-Ghost is an Android WhatsApp scheduler with matching light and dark **Neumorphic Soft UI**, theme-aware Ghost pigeon branding, exact recurring schedules, multi-recipient dispatch, phone-contact import, and closed-app Android automation.
+Ghost is a local WhatsApp scheduler with matching light and dark **Neumorphic Soft UI**, exact recurring schedules, multi-recipient dispatch, contact import, dynamic variables, and persistent queues.
 
-## What’s new in v1.8.9
+## What’s new in v1.9.0
 
-- **Transparent scrolling header**: The header no longer has a raised background and now moves naturally with the rest of the screen content.
-- **Background-free imported contacts**: Contact rows in the phone-contact picker no longer have a separate surface fill or shadow.
-- **Background-free saved contacts**: Imported contact pills in the Contacts section use the same clean, transparent treatment while retaining clear accent selection states.
-- **Unchanged automation**: WhatsApp targeting, scheduling, recurrence, contact import, and closed-app Android execution remain unchanged.
+- **Windows desktop app**: Ghost now packages as a native Windows x64 `.exe` installer with Electron.
+- **Responsive wide-screen UI**: The same approved Soft UI, shadows, controls, branding, light theme, and dark theme are recomposed for large displays.
+- **Tray scheduling**: Closing the window keeps Ghost and its active schedules running in the Windows system tray.
+- **WhatsApp desktop control**: Ghost opens the correct compose route, activates a WhatsApp window, and issues the Send key through native Windows UI automation.
+- **Desktop contact import**: Import `.vcf`, CSV, text, or pasted contact lists without dummy data.
+- **Desktop queue parity**: Contacts, groups, personalized messages, dynamic variables, recurrence, pause/resume, send-now, history, and local persistence remain available.
+- **Safe Windows behavior**: Ghost requires an awake, unlocked, signed-in desktop and never attempts to bypass Windows sign-in or the lock screen.
 
-## Core features
+## Windows desktop release
 
-- **Polished contact import**: Clean background-free rows, search, Select All/Clear, and a selection summary.
-- **Non-scrolling recurrence selector**: Full-width `Once` plus a stable 2×2 `Daily / Weekly / Monthly / Custom` grid.
-- **24-hour scheduling**: Select `00–23` hours and view dispatch, queue, live, and history timestamps as `HH:mm`.
-- **Exact and recurring schedules**: `Once`, `Daily`, `Weekly` (any `Sun–Sat` combination), `Monthly` (`Day 1–31`), and `Custom` (`Every N days`).
-- **Strict app targeting**: WhatsApp opens only `com.whatsapp`; WA Business opens only `com.whatsapp.w4b`.
-- **Multi-person and broadcast dispatch**: Select multiple recipients, create groups, or provide per-person messages.
-- **Dynamic variables**: Resolve `{name}`, `{date}`, and `{day}` independently for each recipient at send time.
-- **Import-only contact creation**: Add contacts from the phone book or `.vcf` / CSV import; long-press editing, favourites, and deletion remain available.
-- **Reliable permissions UI**: Permission controls refresh after returning from Android Settings and reflect actual native state.
-- **Closed-app execution**: Native `AlarmManager`, foreground service, accessibility automation, unrestricted-battery guidance, and appear-on-top support keep schedules active when Ghost is closed.
-- **Lock-screen safeguards**: Ghost can wake and dismiss `None` or `Swipe` locks. It never bypasses a PIN, pattern, password, or biometric lock.
-- **No AI and no dummy data**: Scheduling and automation remain deterministic and local to the app/device bridge.
+- Installer: `Ghost-Desktop-v1.9.0-x64-Setup.exe`
+- Supported systems: Windows 10 and Windows 11, x64
+- Packaging: Electron + NSIS
+- Background mode: Windows system tray
+- Standard routing: WhatsApp Desktop protocol with official WhatsApp Web fallback
+- Business routing: Official WhatsApp Business Web compose route
 
-## Release APK
+> **Windows signing note:** The first desktop installer is not code-signed. Microsoft SmartScreen may display an **Unknown Publisher** warning. Verify the SHA-256 file published beside the installer before running it.
+
+> **Desktop automation requirement:** WhatsApp must already be signed in, and Windows must be awake and unlocked when a dispatch becomes due. UI automation can be affected by future WhatsApp interface changes.
+
+## Android release
+
+The current Android release remains **v1.8.9** (`versionCode 18`).
 
 - File: `releases/Ghost-v1.8.9.apk`
 - Package: `ai.ghost.agent`
-- Version: `1.8.9` (`versionCode 18`)
 - Android: API 26–34
 - Signing: `zipalign` plus APK Signature Schemes v2/v3 verification
 
-> **Install note:** This build uses a newly generated release certificate. Android will not install it over the differently signed public `v1.8.8` APK; uninstall the older Ghost build first, then install `v1.8.9`.
+> **Android install note:** The v1.8.9 APK uses a different certificate from v1.8.8. Uninstall v1.8.8 before installing v1.8.9.
+
+## Shared features
+
+- Light and dark Neumorphic themes using the approved Ghost pigeon identity
+- Background-free contact rows and transparent scrolling header
+- `Once`, `Daily`, `Weekly`, `Monthly`, and custom interval schedules
+- 24-hour time selection
+- Strict Android targeting for `com.whatsapp` and `com.whatsapp.w4b`
+- Multi-person and broadcast dispatch
+- Per-recipient messages and `{name}`, `{first_name}`, `{date}`, and `{day}` variables
+- Contact import with long-press editing, favourites, and deletion
+- Phone/local cache persistence with zero dummy data
+- No AI
 
 ## Development
 
@@ -40,5 +55,10 @@ Ghost is an Android WhatsApp scheduler with matching light and dark **Neumorphic
 npm install
 npm run dev
 npm run build
+npm run test:desktop
+npm run desktop
+npm run build:windows
 npm run build:apk
 ```
+
+The Windows release workflow builds and validates the installer on `windows-latest`, confirms its PE header, generates a SHA-256 checksum, and publishes both files when a `desktop-v*` tag is pushed.

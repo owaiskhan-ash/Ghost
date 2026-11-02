@@ -29,6 +29,44 @@ interface NativeAndroidInterface {
   getDeviceContactsJson?: () => string;
 }
 
+interface DesktopTaskState {
+  id: string;
+  enabled: boolean;
+  scheduledDate?: string;
+  triggerAtMillis?: number;
+  lastSentAt?: string;
+}
+
+interface DesktopStatus {
+  platform: string;
+  version: string;
+  automationAvailable: boolean;
+  backgroundScheduler: boolean;
+  autoLaunchEnabled: boolean;
+}
+
+interface GhostDesktopInterface {
+  info: {
+    isDesktop: boolean;
+    platform: string;
+  };
+  getStatus: () => Promise<DesktopStatus>;
+  setAutoLaunch: (enabled: boolean) => Promise<boolean>;
+  scheduleTask: (task: ScheduledWhatsAppTask) => Promise<{ ok: boolean }>;
+  syncTasks: (tasks: ScheduledWhatsAppTask[]) => Promise<DesktopTaskState[]>;
+  pauseTask: (taskId: string) => Promise<{ ok: boolean }>;
+  cancelTask: (taskId: string) => Promise<{ ok: boolean }>;
+  executeTaskNow: (task: ScheduledWhatsAppTask) => Promise<{ ok: boolean }>;
+  getReceipts: () => Promise<SentHistoryItem[]>;
+  clearData: () => Promise<{ ok: boolean }>;
+  emergencyStop: () => Promise<{ ok: boolean }>;
+  showWindow: () => Promise<{ ok: boolean }>;
+  onReceipt: (callback: (receipt: SentHistoryItem) => void) => void;
+  onTaskState: (callback: (state: DesktopTaskState) => void) => void;
+  onDispatchStopped: (callback: () => void) => void;
+  clearListeners: () => void;
+}
+
 interface WebContactsNavigator extends Navigator {
   contacts?: {
     select: (
@@ -41,6 +79,7 @@ interface WebContactsNavigator extends Navigator {
 declare global {
   interface Window {
     GhostNativeBridge?: NativeAndroidInterface;
+    GhostDesktopBridge?: GhostDesktopInterface;
     onGhostContactPicked?: (contact: { name: string; phone: string }) => void;
     onGhostBulkContactsLoaded?: (
       contacts: Array<{ name: string; phone: string }>
@@ -124,6 +163,9 @@ export function clearAllPhoneCache(keysToClear: string[]): void {
     window.GhostNativeBridge?.clearPhoneCache?.();
   } catch {}
   try {
+    void window.GhostDesktopBridge?.clearData();
+  } catch {}
+  try {
     for (const key of keysToClear) {
       localStorage.removeItem(key);
     }
@@ -135,6 +177,13 @@ export function isRunningInNativeApk(): boolean {
   return typeof window !== 'undefined' && Boolean(window.GhostNativeBridge);
 }
 
+export function isRunningInDesktopApp(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    Boolean(window.GhostDesktopBridge?.info?.isDesktop)
+  );
+}
+
 export function syncNativeDarkMode(dark: boolean): void {
   try {
     window.GhostNativeBridge?.setDarkMode?.(dark);
@@ -144,6 +193,22 @@ export function syncNativeDarkMode(dark: boolean): void {
 }
 
 export function getAndroidDeviceStatus(): AndroidDeviceStatus {
+  if (window.GhostDesktopBridge?.info?.isDesktop) {
+    return {
+      isNativeApk: false,
+      isDesktopApp: true,
+      deviceModel: 'Windows PC',
+      androidVersion: 'Ghost Desktop',
+      accessibilityEnabled: true,
+      exactAlarmAllowed: true,
+      batteryUnrestricted: true,
+      overlayAllowed: true,
+      screenLockSecure: false,
+      whatsappInstalled: true,
+      whatsappBusinessInstalled: true,
+    };
+  }
+
   if (window.GhostNativeBridge?.getDeviceStatusJson) {
     try {
       const raw = JSON.parse(window.GhostNativeBridge.getDeviceStatusJson());
@@ -191,6 +256,10 @@ export function scheduleNativeAlarmTask(task: ScheduledWhatsAppTask): boolean {
       return false;
     }
   }
+  if (window.GhostDesktopBridge?.scheduleTask) {
+    void window.GhostDesktopBridge.scheduleTask(task).catch(() => undefined);
+    return true;
+  }
   return false;
 }
 
@@ -201,11 +270,18 @@ export function pauseNativeAlarmTask(taskId: string): void {
       return;
     } catch {}
   }
+  if (window.GhostDesktopBridge?.pauseTask) {
+    void window.GhostDesktopBridge.pauseTask(taskId).catch(() => undefined);
+    return;
+  }
   window.GhostNativeBridge?.cancelTask?.(taskId);
 }
 
 export function cancelNativeAlarmTask(taskId: string): void {
   window.GhostNativeBridge?.cancelTask?.(taskId);
+  if (window.GhostDesktopBridge?.cancelTask) {
+    void window.GhostDesktopBridge.cancelTask(taskId).catch(() => undefined);
+  }
 }
 
 export function loadNativeTaskStates(): Array<{
@@ -273,11 +349,59 @@ export function executeNativeTaskNow(task: ScheduledWhatsAppTask): boolean {
       return false;
     }
   }
+  if (window.GhostDesktopBridge?.executeTaskNow) {
+    void window.GhostDesktopBridge.executeTaskNow(task).catch(() => undefined);
+    return true;
+  }
   return false;
 }
 
 export function triggerNativeEmergencyStop(): void {
   window.GhostNativeBridge?.emergencyStop?.();
+  if (window.GhostDesktopBridge?.emergencyStop) {
+    void window.GhostDesktopBridge.emergencyStop().catch(() => undefined);
+  }
+}
+
+export function syncDesktopTasks(tasks: ScheduledWhatsAppTask[]): void {
+  if (!window.GhostDesktopBridge?.syncTasks) return;
+  void window.GhostDesktopBridge.syncTasks(tasks).catch(() => undefined);
+}
+
+export async function loadDesktopReceipts(): Promise<SentHistoryItem[]> {
+  if (!window.GhostDesktopBridge?.getReceipts) return [];
+  try {
+    return await window.GhostDesktopBridge.getReceipts();
+  } catch {
+    return [];
+  }
+}
+
+export function subscribeDesktopEvents(callbacks: {
+  onReceipt: (receipt: SentHistoryItem) => void;
+  onTaskState: (state: DesktopTaskState) => void;
+  onDispatchStopped?: () => void;
+}): () => void {
+  const bridge = window.GhostDesktopBridge;
+  if (!bridge) return () => undefined;
+  bridge.onReceipt(callbacks.onReceipt);
+  bridge.onTaskState(callbacks.onTaskState);
+  bridge.onDispatchStopped(callbacks.onDispatchStopped || (() => undefined));
+  return () => bridge.clearListeners();
+}
+
+export async function getDesktopStatus(): Promise<DesktopStatus | null> {
+  if (!window.GhostDesktopBridge?.getStatus) return null;
+  try {
+    return await window.GhostDesktopBridge.getStatus();
+  } catch {
+    return null;
+  }
+}
+
+export function setDesktopAutoLaunch(enabled: boolean): Promise<boolean> {
+  if (!window.GhostDesktopBridge?.setAutoLaunch) return Promise.resolve(false);
+  return window.GhostDesktopBridge.setAutoLaunch(enabled).catch(() => false);
 }
 
 export function openNativeSettings(target: NativeSettingsTarget): boolean {
