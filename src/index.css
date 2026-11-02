@@ -1063,6 +1063,116 @@ html.dark .soft-backdrop {
   opacity: 0.5;
 }
 
+/* Windows desktop shell: same Soft UI language, composed for wide screens. */
+.desktop-mode .soft-header,
+.desktop-mode .soft-main-content {
+  width: min(100%, 1440px);
+  margin-inline: auto;
+}
+
+.desktop-mode .soft-header {
+  min-height: 72px;
+  margin-top: 22px;
+  margin-bottom: 18px;
+  padding-inline: 24px;
+}
+
+.desktop-mode .brand-wordmark {
+  font-size: 1.08rem;
+}
+
+.desktop-mode .soft-main-content {
+  padding: 8px 42px 18px;
+}
+
+.desktop-mode .soft-screen {
+  gap: 22px !important;
+}
+
+.desktop-mode .soft-screen > .bento-card,
+.desktop-mode .soft-panel {
+  padding: 22px !important;
+}
+
+.desktop-mode .command-deck .desktop-contact-card,
+.desktop-mode .command-deck .desktop-time-card,
+.desktop-mode .command-deck .desktop-target-card,
+.desktop-mode .command-deck .desktop-schedule-card,
+.desktop-mode .command-deck .desktop-message-card {
+  min-width: 0;
+}
+
+.desktop-mode .command-deck .desktop-contact-card > div[class*='grid-cols-2'] {
+  max-height: 260px;
+}
+
+.desktop-mode .setup-view > .soft-theme-card,
+.desktop-mode .setup-view > .soft-route-card {
+  grid-column: span 3 / span 3;
+}
+
+.desktop-mode .setup-view > section.bento-card {
+  grid-column: span 6 / span 6;
+  align-self: start;
+}
+
+.desktop-mode .soft-contact-picker-modal {
+  max-width: 680px;
+}
+
+.desktop-mode .soft-contact-picker-list {
+  max-height: min(48dvh, 420px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+}
+
+@media (min-width: 1100px) {
+  .desktop-mode .command-deck .desktop-contact-card {
+    grid-column: 1 / 6;
+  }
+
+  .desktop-mode .command-deck .desktop-time-card {
+    grid-column: 6 / 10;
+  }
+
+  .desktop-mode .command-deck .desktop-target-card {
+    grid-column: 10 / 13;
+  }
+
+  .desktop-mode .command-deck .desktop-schedule-card {
+    grid-column: 1 / 6;
+  }
+
+  .desktop-mode .command-deck .desktop-message-card {
+    grid-column: 6 / 13;
+  }
+}
+
+@media (max-width: 900px) {
+  .desktop-mode .soft-header {
+    margin-inline: 18px;
+    padding-inline: 10px;
+  }
+
+  .desktop-mode .soft-main-content {
+    padding-inline: 22px;
+  }
+
+  .desktop-mode .setup-view > .soft-theme-card,
+  .desktop-mode .setup-view > .soft-route-card {
+    grid-column: span 6 / span 6;
+  }
+
+  .desktop-mode .setup-view > section.bento-card {
+    grid-column: span 12 / span 12;
+  }
+
+  .desktop-mode .soft-contact-picker-list {
+    display: flex;
+  }
+}
+
 @media (max-width: 420px) {
   .soft-header {
     margin-inline: 17px;

@@ -1,0 +1,114 @@
+name: Build Ghost Windows Desktop
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  push:
+    tags:
+      - "desktop-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows-desktop:
+    runs-on: windows-latest
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test desktop scheduling and routing
+        run: npm run test:desktop
+
+      - name: Build renderer
+        run: npm run build
+
+      - name: Build Windows x64 installer
+        run: npx electron-builder --win nsis --x64
+
+      - name: Validate executable and create checksum
+        id: validate
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem "releases/desktop/Ghost-Desktop-*-Setup.exe" | Select-Object -First 1
+          if (-not $installer) { throw "Ghost Windows installer was not created" }
+          $bytes = [System.IO.File]::ReadAllBytes($installer.FullName)
+          if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) {
+            throw "Installer does not have a valid Windows PE MZ header"
+          }
+          $hash = (Get-FileHash $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($installer.Name)" | Set-Content "releases/desktop/SHA256SUMS.txt" -Encoding ascii
+          "installer=$($installer.FullName)" >> $env:GITHUB_OUTPUT
+          "name=$($installer.Name)" >> $env:GITHUB_OUTPUT
+          "sha256=$hash" >> $env:GITHUB_OUTPUT
+          Write-Host "Validated $($installer.Name) ($($installer.Length) bytes)"
+          Write-Host "SHA-256: $hash"
+
+      - name: Upload tested Windows artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: Ghost-Windows-x64
+          path: |
+            releases/desktop/Ghost-Desktop-*-Setup.exe
+            releases/desktop/SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Prepare desktop release notes
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          @"
+          Ghost Desktop v1.9.0 brings the complete Neumorphic Ghost scheduler to Windows in a responsive wide-screen layout.
+
+          ## Windows desktop features
+
+          - Responsive wide-screen version of the same light and dark Soft UI
+          - Local contacts, groups, dynamic variables, recurrence, and queue persistence
+          - VCF, CSV, and pasted contact import
+          - System-tray background scheduler
+          - WhatsApp Desktop compose routing and WA Business Web routing
+          - Native Windows UI automation to activate WhatsApp and issue Send
+          - Pause, resume, delete, send-now, multi-recipient, and emergency-stop controls
+          - Optional Start with Windows setting
+
+          ## Requirements and safety
+
+          - Windows 10 or Windows 11, x64
+          - WhatsApp must be signed in
+          - Windows must be awake and unlocked at dispatch time
+          - Ghost never bypasses Windows sign-in or the lock screen
+          - This installer is currently unsigned, so Microsoft SmartScreen may show an Unknown Publisher warning
+
+          ## Verification
+
+          - TypeScript and Vite production build passed
+          - Desktop scheduling/routing tests passed
+          - Electron Builder produced an NSIS x64 installer
+          - Windows PE MZ header verified
+          - SHA-256: ${{ steps.validate.outputs.sha256 }}
+          "@ | Set-Content "releases/desktop/release-notes.md" -Encoding utf8
+
+      - name: Publish GitHub desktop release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            "${{ steps.validate.outputs.installer }}" `
+            "releases/desktop/SHA256SUMS.txt" `
+            --verify-tag `
+            --title "Ghost Desktop v1.9.0 — Windows x64" `
+            --notes-file "releases/desktop/release-notes.md"
