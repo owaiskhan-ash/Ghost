@@ -68,6 +68,13 @@ function Test-AutomationMode {
     if (-not $result.ok -or $result.method -notmatch $ExpectedMethodPattern) {
       throw "$Mode automation returned the wrong method: $($result | ConvertTo-Json -Compress)"
     }
+    if ($null -eq $result.PSObject.Properties['confirmed']) {
+      throw "$Mode automation omitted the confirmation state: $($result | ConvertTo-Json -Compress)"
+    }
+    $signalDeadline = [DateTime]::UtcNow.AddMilliseconds(750)
+    while (-not (Test-Path $signal -PathType Leaf) -and [DateTime]::UtcNow -lt $signalDeadline) {
+      Start-Sleep -Milliseconds 25
+    }
     if (-not (Test-Path $signal -PathType Leaf)) {
       throw "Synthetic $Mode Send target was not activated"
     }
@@ -76,6 +83,9 @@ function Test-AutomationMode {
     }
 
     Write-Host "Windows $Mode integration passed in $($timer.ElapsedMilliseconds) ms: $($result.method)"
+    if ($env:GITHUB_ACTIONS -eq 'true') {
+      Write-Host "::notice title=Windows $Mode Send latency::$($timer.ElapsedMilliseconds) ms via $($result.method)"
+    }
   }
   finally {
     if ($harnessProcess -and -not $harnessProcess.HasExited) {
@@ -172,8 +182,8 @@ try {
     -OutputAssembly $harnessExe `
     -OutputType WindowsApplication
 
-  Test-AutomationMode $harnessExe 'Invoke' '^uia-(invoke|default-action|clickable-point)$' 12 6000
-  Test-AutomationMode $harnessExe 'Coordinate' '^composer-adjacent-click$' 14 7500
+  Test-AutomationMode $harnessExe 'Invoke' '^uia-(invoke|default-action|clickable-point)$' 12 5000
+  Test-AutomationMode $harnessExe 'Coordinate' '^composer-adjacent-click$' 14 5500
 }
 catch {
   $message = $_.Exception.Message.Replace("`r", ' ').Replace("`n", ' ')

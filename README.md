@@ -1,18 +1,20 @@
-# Ghost (`v1.9.3`) — Windows & Android WhatsApp Scheduler
+# Ghost (`v1.9.4`) — Windows & Android WhatsApp Scheduler
 
 Ghost is a local WhatsApp scheduler with matching light and dark **Neumorphic Soft UI**, exact recurring schedules, multi-recipient dispatch, contact import, dynamic variables, and persistent queues.
 
-## What’s new in v1.9.3
+## What’s new in v1.9.4
 
-- **Faster automatic Send**: Removes the fixed eight-second wait before the hidden-control fallback.
-- **Adaptive timing**: A verified composer can use the Send-position fallback after about one second; WhatsApp builds exposing no accessibility details use it after about 2.6 seconds.
-- **Quicker direct control**: Accessible Send buttons are attempted after the initial half-second stabilization period.
-- **Safe behavior retained**: Message verification, foreground checks, custom Chromium control discovery, focused-Enter fallback, Emergency Stop, and visible diagnostics remain active.
-- **Timing regression test**: Windows CI now fails if either the accessible-control or hidden-control path exceeds its latency budget.
+- **High-volume dispatch**: Replaces the fixed 2.2-second gap after every recipient with a 75 ms confirmed handoff or a conservative 300 ms unverified handoff.
+- **Faster Send detection**: Polls the WhatsApp accessibility tree every 75 ms and reaches the hidden-control fallback after about 1.9 seconds.
+- **Less repeated work**: Skips focus delays when WhatsApp is already foregrounded and checkpoints bulk receipt history every 25 successful sends.
+- **Safe sequential routing**: Each recipient still completes before the next route opens; expected-message checks, a same-message route guard, confirmation checks, and Emergency Stop remain active.
+- **New black application icon**: Includes the approved white pigeon on black for the installer, taskbar, and system tray.
+
+For a 1,000-recipient confirmed batch, the handoff change removes roughly 35 minutes of Ghost-imposed idle time. Actual throughput still depends on WhatsApp Desktop, the PC, the connection, and WhatsApp account limits. Ghost does not parallelize one WhatsApp window because doing so could cross recipients and messages.
 
 ## Windows desktop release
 
-- Installer: `Ghost-Desktop-v1.9.3-x64-Setup.exe`
+- Installer: `Ghost-Desktop-v1.9.4-x64-Setup.exe`
 - Supported systems: Windows 10 and Windows 11, x64
 - Packaging: Electron + NSIS
 - Background mode: Windows system tray
@@ -31,6 +33,8 @@ Ghost is a local WhatsApp scheduler with matching light and dark **Neumorphic So
 > **Windows signing note:** The desktop installer is not code-signed. Microsoft SmartScreen may display an **Unknown Publisher** warning. Verify the SHA-256 file published beside the installer before running it.
 
 > **Desktop automation requirement:** WhatsApp must already be signed in, and Windows must be awake and unlocked when a dispatch becomes due. Run Ghost and WhatsApp at the same normal privilege level; do not run only one of them as Administrator.
+
+> **Bulk messaging:** Use Ghost only for recipients who consented to receive messages. WhatsApp can rate-limit or restrict accounts independently of Ghost. For sustained campaigns to thousands of recipients, use the official WhatsApp Business Platform and its approved templates and limits.
 
 ## Android release
 

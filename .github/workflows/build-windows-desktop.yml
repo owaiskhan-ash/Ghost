@@ -133,16 +133,17 @@ jobs:
         shell: pwsh
         run: |
           @"
-          Ghost Desktop v1.9.3 makes automatic Send substantially faster while retaining the v1.9.2 WhatsApp compatibility fallbacks.
+          Ghost Desktop v1.9.4 accelerates high-volume sending and includes the approved white-pigeon-on-black Windows icon.
 
           ## What changed
 
-          - Removes the fixed eight-second wait before the hidden-control Send click
-          - Uses the fallback after about one second when the composer text is verified
-          - Uses the fallback after about 2.6 seconds when WhatsApp exposes no accessibility details
-          - Attempts accessible Send controls after a half-second stabilization period
-          - Keeps expected-message verification, foreground checks, custom Chromium control discovery, and safe focused-Enter fallback
-          - Retains full failure diagnostics, Emergency Stop, responsive Soft UI, tray scheduling, contacts, groups, recurrence, and queue persistence
+          - Replaces the fixed 2.2-second recipient gap with 75 ms confirmed or 300 ms conservative handoffs
+          - Polls Send controls every 75 ms and reaches the hidden-control fallback after about 1.9 seconds
+          - Skips redundant foreground waits while WhatsApp is already active
+          - Checkpoints receipt history in batches instead of blocking every successful recipient
+          - Keeps dispatch sequential, verifies composer text when WhatsApp exposes it, and retains same-message route protection
+          - Includes the new black installer, taskbar, and tray icon
+          - Retains failure diagnostics, Emergency Stop, responsive Soft UI, tray scheduling, contacts, groups, recurrence, and queue persistence
 
           ## Requirements and safety
 
@@ -150,7 +151,8 @@ jobs:
           - WhatsApp must be signed in
           - Windows must be awake and unlocked at dispatch time
           - Ghost and WhatsApp must run at the same normal privilege level
-          - Ghost never bypasses Windows sign-in or the lock screen
+          - Use only with recipients who consented to receive messages; WhatsApp account limits still apply
+          - Ghost never bypasses Windows sign-in, the lock screen, or WhatsApp limits
           - This installer is currently unsigned, so Microsoft SmartScreen may show an Unknown Publisher warning
 
           ## Verification
@@ -176,5 +178,5 @@ jobs:
             "${{ steps.validate.outputs.installer }}" `
             "releases/desktop/SHA256SUMS.txt" `
             --verify-tag `
-            --title "Ghost Desktop v1.9.3 — Faster Automatic Send" `
+            --title "Ghost Desktop v1.9.4 — Faster High-Volume Sending" `
             --notes-file "releases/desktop/release-notes.md"

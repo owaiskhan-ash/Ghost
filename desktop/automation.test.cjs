@@ -9,6 +9,7 @@ const {
   isValidTask,
   normalizePhone,
   parseAutomationOutput,
+  recipientHandoffDelay,
   resolveMessageVariables,
   taskRecipients,
 } = require('./automation.cjs');
@@ -107,12 +108,17 @@ test('hashes normalized composer text for safe route verification', () => {
   );
 });
 
-test('parses the structured PowerShell UI Automation result', () => {
+test('parses confirmed structured PowerShell UI Automation results', () => {
   assert.deepEqual(
     parseAutomationOutput(
-      'diagnostic line\n{"ok":true,"method":"uia-invoke","detail":"Send invoked."}\n'
+      'diagnostic line\n{"ok":true,"method":"uia-invoke","detail":"Send invoked.","confirmed":true}\n'
     ),
-    { ok: true, method: 'uia-invoke', detail: 'Send invoked.' }
+    {
+      ok: true,
+      method: 'uia-invoke',
+      detail: 'Send invoked.',
+      confirmed: true,
+    }
   );
 });
 
@@ -125,6 +131,7 @@ test('preserves structured PowerShell automation failures', () => {
       ok: false,
       method: 'composer-mismatch',
       detail: 'Expected message was not loaded.',
+      confirmed: false,
     }
   );
 });
@@ -134,7 +141,14 @@ test('returns a safe failure when PowerShell has no structured result', () => {
     ok: false,
     method: 'automation-error',
     detail: 'Timed out.',
+    confirmed: false,
   });
+});
+
+test('paces bulk handoffs from the Send confirmation result', () => {
+  assert.equal(recipientHandoffDelay({ ok: true, confirmed: true }), 75);
+  assert.equal(recipientHandoffDelay({ ok: true, confirmed: false }), 300);
+  assert.equal(recipientHandoffDelay({ ok: false, confirmed: false }), 600);
 });
 
 test('validates single and batch desktop tasks', () => {
