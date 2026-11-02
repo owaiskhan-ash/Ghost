@@ -1,7 +1,7 @@
 {
   "name": "ghost-whatsapp-scheduler",
   "private": true,
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Ghost — responsive Windows and Android WhatsApp scheduler",
   "type": "module",
   "scripts": {
@@ -45,6 +45,7 @@
     "files": [
       "dist/**/*",
       "desktop/**/*.cjs",
+      "desktop/**/*.ps1",
       "desktop/assets/desktop-icon.ico",
       "package.json"
     ],
@@ -67,7 +68,10 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Ghost"
-    }
+    },
+    "asarUnpack": [
+      "desktop/windows/*.ps1"
+    ]
   },
   "author": "Ghost"
 }

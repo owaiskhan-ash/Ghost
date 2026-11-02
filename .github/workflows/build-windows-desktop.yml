@@ -32,11 +32,61 @@ jobs:
       - name: Test desktop scheduling and routing
         run: npm run test:desktop
 
+      - name: Validate Windows Send automation script
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path "desktop/windows/send-whatsapp.ps1"),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw "Windows UI Automation script has syntax errors"
+          }
+          $source = Get-Content "desktop/windows/send-whatsapp.ps1" -Raw
+          if (
+            $source -notmatch "InvokePattern" -or
+            $source -notmatch "TryGetClickablePoint" -or
+            $source -notmatch "ExpectedMessageHash" -or
+            $source -notmatch "GetForegroundWindow"
+          ) {
+            throw "Safe Send button invocation checks are missing"
+          }
+
+          $smokeHash = -join ("0" * 64)
+          $smokeOutput = & powershell.exe -NoLogo -NoProfile -NonInteractive `
+            -ExecutionPolicy Bypass `
+            -File "desktop/windows/send-whatsapp.ps1" `
+            -GhostProcessId $PID `
+            -ExpectedMessageHash $smokeHash `
+            -TargetKind Desktop `
+            -TimeoutSeconds 3
+          $smokeExit = $LASTEXITCODE
+          $smokeResult = $smokeOutput | Select-Object -Last 1 | ConvertFrom-Json
+          if ($smokeExit -ne 2 -or $smokeResult.method -ne "window-not-found") {
+            throw "Windows UI Automation smoke test did not return its structured no-window result"
+          }
+          $global:LASTEXITCODE = 0
+
       - name: Build renderer
         run: npm run build
 
       - name: Build Windows x64 installer
         run: npx electron-builder --win nsis --x64 --publish never
+
+      - name: Verify packaged automation resource
+        shell: powershell
+        run: |
+          $script = "releases/desktop/win-unpacked/resources/app.asar.unpacked/desktop/windows/send-whatsapp.ps1"
+          if (-not (Test-Path $script -PathType Leaf)) {
+            throw "Packaged Windows Send automation script is missing"
+          }
+          if ((Get-Item $script).Length -lt 1000) {
+            throw "Packaged Windows Send automation script is unexpectedly empty"
+          }
 
       - name: Validate executable and create checksum
         id: validate
@@ -70,31 +120,36 @@ jobs:
         shell: pwsh
         run: |
           @"
-          Ghost Desktop v1.9.0 brings the complete Neumorphic Ghost scheduler to Windows in a responsive wide-screen layout.
+          Ghost Desktop v1.9.1 fixes automatic sending after WhatsApp opens the correct chat and pre-fills the message.
 
-          ## Windows desktop features
+          ## What changed
 
-          - Responsive wide-screen version of the same light and dark Soft UI
-          - Local contacts, groups, dynamic variables, recurrence, and queue persistence
-          - VCF, CSV, and pasted contact import
-          - System-tray background scheduler
-          - WhatsApp Desktop compose routing and WA Business Web routing
-          - Native Windows UI automation to activate WhatsApp and issue Send
-          - Pause, resume, delete, send-now, multi-recipient, and emergency-stop controls
-          - Optional Start with Windows setting
+          - Replaces the blind Enter-key action with direct Windows UI Automation
+          - Polls for the real WhatsApp Send button while the compose screen loads
+          - Verifies the intended pre-filled composer text when WhatsApp exposes it
+          - Invokes the button through UIA InvokePattern when available
+          - Falls back to the accessible default action or a UIA-derived clickable point
+          - Uses Enter only after waiting for Send, locating the composer, and confirming focus
+          - Restores and foregrounds the WhatsApp window before interacting
+          - Cancels the active automation worker when Emergency Stop is used
+          - Records the exact successful method or failure reason in dispatch history
+          - Retains the responsive light/dark Soft UI, tray scheduler, contacts, groups, recurrence, and queue persistence
 
           ## Requirements and safety
 
           - Windows 10 or Windows 11, x64
           - WhatsApp must be signed in
           - Windows must be awake and unlocked at dispatch time
+          - Ghost and WhatsApp must run at the same normal privilege level
           - Ghost never bypasses Windows sign-in or the lock screen
           - This installer is currently unsigned, so Microsoft SmartScreen may show an Unknown Publisher warning
 
           ## Verification
 
           - TypeScript and Vite production build passed
-          - Desktop scheduling/routing tests passed
+          - Desktop scheduling, routing, and automation-result tests passed
+          - PowerShell UI Automation script parsed and smoke-tested on Windows PowerShell
+          - Packaged ASAR-unpacked automation resource verified
           - Electron Builder produced an NSIS x64 installer
           - Windows PE MZ header verified
           - SHA-256: ${{ steps.validate.outputs.sha256 }}
@@ -110,5 +165,5 @@ jobs:
             "${{ steps.validate.outputs.installer }}" `
             "releases/desktop/SHA256SUMS.txt" `
             --verify-tag `
-            --title "Ghost Desktop v1.9.0 — Windows x64" `
+            --title "Ghost Desktop v1.9.1 — Automatic Send Fix" `
             --notes-file "releases/desktop/release-notes.md"
