@@ -60,7 +60,7 @@ function Test-AutomationMode {
     $result = $resultLine | ConvertFrom-Json
 
     if ($automationExit -ne 0) {
-      throw "$Mode automation exited with $automationExit: $($result.method): $($result.detail)"
+      throw "$Mode automation exited with ${automationExit}: $($result.method): $($result.detail)"
     }
     if (-not $result.ok -or $result.method -ne $ExpectedMethod) {
       throw "$Mode automation returned the wrong method: $($result | ConvertTo-Json -Compress)"
