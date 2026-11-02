@@ -35,16 +35,24 @@ jobs:
       - name: Validate Windows Send automation script
         shell: powershell
         run: |
-          $tokens = $null
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path "desktop/windows/send-whatsapp.ps1"),
-            [ref]$tokens,
-            [ref]$errors
-          ) | Out-Null
-          if ($errors.Count -gt 0) {
-            $errors | ForEach-Object { Write-Error $_.Message }
-            throw "Windows UI Automation script has syntax errors"
+          foreach ($scriptPath in @(
+            "desktop/windows/send-whatsapp.ps1",
+            ".github/scripts/test-send-whatsapp.ps1"
+          )) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $scriptPath),
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object {
+                $line = $_.Extent.StartLineNumber
+                Write-Host "::error file=$scriptPath,line=$line,title=PowerShell syntax error::$($_.Message)"
+              }
+              throw "$scriptPath has syntax errors"
+            }
           }
           $source = Get-Content "desktop/windows/send-whatsapp.ps1" -Raw
           if (
