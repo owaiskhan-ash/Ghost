@@ -35,23 +35,32 @@ jobs:
       - name: Validate Windows Send automation script
         shell: powershell
         run: |
-          $tokens = $null
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile(
-            (Resolve-Path "desktop/windows/send-whatsapp.ps1"),
-            [ref]$tokens,
-            [ref]$errors
-          ) | Out-Null
-          if ($errors.Count -gt 0) {
-            $errors | ForEach-Object { Write-Error $_.Message }
-            throw "Windows UI Automation script has syntax errors"
+          foreach ($scriptPath in @(
+            "desktop/windows/send-whatsapp.ps1",
+            ".github/scripts/test-send-whatsapp.ps1"
+          )) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $scriptPath),
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | ForEach-Object {
+                $line = $_.Extent.StartLineNumber
+                Write-Host "::error file=$scriptPath,line=$line,title=PowerShell syntax error::$($_.Message)"
+              }
+              throw "$scriptPath has syntax errors"
+            }
           }
           $source = Get-Content "desktop/windows/send-whatsapp.ps1" -Raw
           if (
             $source -notmatch "InvokePattern" -or
             $source -notmatch "TryGetClickablePoint" -or
             $source -notmatch "ExpectedMessageHash" -or
-            $source -notmatch "GetForegroundWindow"
+            $source -notmatch "GetForegroundWindow" -or
+            $source -notmatch "Click-ComposerAdjacentSendPoint"
           ) {
             throw "Safe Send button invocation checks are missing"
           }
@@ -70,6 +79,10 @@ jobs:
             throw "Windows UI Automation smoke test did not return its structured no-window result"
           }
           $global:LASTEXITCODE = 0
+
+      - name: Exercise UIA Send and hidden-control fallback
+        shell: powershell
+        run: .\.github\scripts\test-send-whatsapp.ps1
 
       - name: Build renderer
         run: npm run build
@@ -120,20 +133,19 @@ jobs:
         shell: pwsh
         run: |
           @"
-          Ghost Desktop v1.9.1 fixes automatic sending after WhatsApp opens the correct chat and pre-fills the message.
+          Ghost Desktop v1.9.2 adds compatibility fallbacks for WhatsApp Desktop builds that hide their Send controls from the standard accessibility tree.
 
           ## What changed
 
-          - Replaces the blind Enter-key action with direct Windows UI Automation
-          - Polls for the real WhatsApp Send button while the compose screen loads
-          - Verifies the intended pre-filled composer text when WhatsApp exposes it
-          - Invokes the button through UIA InvokePattern when available
-          - Falls back to the accessible default action or a UIA-derived clickable point
-          - Uses Enter only after waiting for Send, locating the composer, and confirming focus
-          - Restores and foregrounds the WhatsApp window before interacting
+          - Recognizes custom Chromium controls in addition to standard Windows buttons and editors
+          - Probes the visible WhatsApp footer with UI Automation point discovery
+          - Clicks the settled Send position beside the composer when WhatsApp exposes no actionable control
+          - Keeps InvokePattern, accessible default action, and UIA clickable-point methods as first choices
+          - Uses Enter only as a late fallback after locating and focusing the composer
+          - Clarifies that Windows has no automation permission prompt
+          - Opens History automatically on failure and displays the full diagnostic reason
           - Cancels the active automation worker when Emergency Stop is used
-          - Records the exact successful method or failure reason in dispatch history
-          - Retains the responsive light/dark Soft UI, tray scheduler, contacts, groups, recurrence, and queue persistence
+          - Retains expected-message checks, foreground checks, responsive Soft UI, tray scheduling, contacts, groups, recurrence, and queue persistence
 
           ## Requirements and safety
 
@@ -149,6 +161,7 @@ jobs:
           - TypeScript and Vite production build passed
           - Desktop scheduling, routing, and automation-result tests passed
           - PowerShell UI Automation script parsed and smoke-tested on Windows PowerShell
+          - Synthetic WhatsApp window confirmed real UIA Send-button invocation
           - Packaged ASAR-unpacked automation resource verified
           - Electron Builder produced an NSIS x64 installer
           - Windows PE MZ header verified
@@ -165,5 +178,5 @@ jobs:
             "${{ steps.validate.outputs.installer }}" `
             "releases/desktop/SHA256SUMS.txt" `
             --verify-tag `
-            --title "Ghost Desktop v1.9.1 — Automatic Send Fix" `
+            --title "Ghost Desktop v1.9.2 — WhatsApp Control Compatibility" `
             --notes-file "releases/desktop/release-notes.md"

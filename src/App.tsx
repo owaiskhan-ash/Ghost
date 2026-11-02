@@ -214,6 +214,7 @@ export function App() {
           ? prev
           : [receipt, ...prev]
       );
+      if (receipt.status !== 'SENT') setActiveTab('scheduled');
     };
 
     const unsubscribe = subscribeDesktopEvents({

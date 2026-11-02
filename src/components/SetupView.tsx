@@ -64,8 +64,8 @@ export const SetupView: React.FC<SetupViewProps> = ({
   }> = desktopMode
     ? [
         {
-          label: 'Windows UI Automation',
-          sub: 'Finds and invokes the WhatsApp Send button',
+          label: 'Windows control bridge',
+          sub: 'Built into Windows — no permission prompt is shown',
           ok: true,
           target: 'accessibility',
         },
@@ -205,7 +205,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
                   app.installed ? '' : 'is-muted'
                 }`}
               />
-              {app.installed ? 'Ready' : 'Missing'}
+              {app.installed ? (desktopMode ? 'Route' : 'Ready') : 'Missing'}
             </span>
           </div>
           <div>
@@ -254,7 +254,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
 
       <p className="col-span-12 px-3 text-[10px] leading-4 text-ghost-muted">
         {desktopMode
-          ? 'Desktop sending works while Windows is awake and unlocked, with WhatsApp signed in. Keep Ghost running in the system tray; no lock-screen bypass is attempted.'
+          ? 'Windows does not show an automation permission request. Keep Ghost and WhatsApp at the same normal privilege level, with Windows awake and unlocked and WhatsApp signed in.'
           : 'Automatic sending works only while the screen is unlocked or the phone has no PIN, pattern, or password lock. If securely locked, Ghost shows a notification instead—allow notifications when prompted.'}
       </p>
 
@@ -292,6 +292,10 @@ export const SetupView: React.FC<SetupViewProps> = ({
                       {autoLaunch && <Check />}
                     </span>
                   </button>
+                ) : desktopMode ? (
+                  <span className="soft-pill text-ghost-accent">
+                    {index === 0 ? 'No prompt' : index === 1 ? 'Active' : 'Required'}
+                  </span>
                 ) : deviceStatus.isNativeApk ? (
                   <button
                     type="button"

@@ -436,6 +436,7 @@ async function performDispatch(task, manual) {
   const generation = dispatchGeneration;
   const recipients = taskRecipients(task);
   let successful = 0;
+  let lastFailureDetail = '';
 
   for (let index = 0; index < recipients.length; index += 1) {
     if (generation !== dispatchGeneration) break;
@@ -454,6 +455,7 @@ async function performDispatch(task, manual) {
     );
     storeReceipt(receipt);
     if (sendResult.ok) successful += 1;
+    else lastFailureDetail = `${sendResult.method}: ${sendResult.detail}`;
     if (index + 1 < recipients.length && generation === dispatchGeneration) {
       await delay(RECIPIENT_GAP);
     }
@@ -469,7 +471,7 @@ async function performDispatch(task, manual) {
       body:
         successful === recipients.length
           ? `${successful} message${successful === 1 ? '' : 's'} sent through WhatsApp.`
-          : `${successful} of ${recipients.length} messages sent. Keep Windows unlocked and WhatsApp signed in.`,
+          : (lastFailureDetail || `${successful} of ${recipients.length} messages sent.`).slice(0, 220),
     }).show();
   }
   return successful === recipients.length;
