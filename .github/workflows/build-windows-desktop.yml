@@ -36,7 +36,7 @@ jobs:
         run: npm run build
 
       - name: Build Windows x64 installer
-        run: npx electron-builder --win nsis --x64
+        run: npx electron-builder --win nsis --x64 --publish never
 
       - name: Validate executable and create checksum
         id: validate
