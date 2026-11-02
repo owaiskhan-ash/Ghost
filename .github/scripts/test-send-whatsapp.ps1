@@ -1,74 +1,4 @@
-param(
-  [switch]$Harness,
-  [ValidateSet('Invoke', 'Coordinate')]
-  [string]$HarnessMode = 'Invoke',
-  [string]$SignalPath
-)
-
 $ErrorActionPreference = 'Stop'
-
-if ($Harness) {
-  Add-Type -AssemblyName System.Windows.Forms
-  Add-Type -AssemblyName System.Drawing
-
-  $form = New-Object System.Windows.Forms.Form
-  $form.Text = "WhatsApp $HarnessMode Integration Test"
-  $form.StartPosition = 'CenterScreen'
-  $form.ClientSize = New-Object System.Drawing.Size(720, 360)
-  $form.TopMost = $true
-
-  $heading = New-Object System.Windows.Forms.Label
-  $heading.Text = "Synthetic WhatsApp $HarnessMode compose window"
-  $heading.SetBounds(40, 35, 450, 28)
-  $form.Controls.Add($heading)
-
-  if ($HarnessMode -eq 'Invoke') {
-    $messageBox = New-Object System.Windows.Forms.TextBox
-    $messageBox.Text = 'Ghost integration message'
-    $messageBox.AccessibleName = 'Type a message'
-    $messageBox.SetBounds(40, 275, 540, 30)
-
-    $sendButton = New-Object System.Windows.Forms.Button
-    $sendButton.Text = 'Send'
-    $sendButton.AccessibleName = 'Send'
-    $sendButton.SetBounds(600, 268, 80, 42)
-    $sendButton.Add_Click({
-      $messageBox.Text = ''
-      [System.IO.File]::WriteAllText($SignalPath, 'clicked')
-    })
-
-    $form.Controls.Add($messageBox)
-    $form.Controls.Add($sendButton)
-    $form.Add_Shown({
-      $form.Activate()
-      [void]$messageBox.Focus()
-    })
-  }
-  else {
-    # Deliberately draw, rather than add, the Send control so that it is absent
-    # from the accessibility tree and the coordinate compatibility path is used.
-    $form.Add_Paint({
-      param($sender, $eventArgs)
-      $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(95, 179, 179))
-      try {
-        $eventArgs.Graphics.FillEllipse($brush, 650, 290, 52, 52)
-      }
-      finally {
-        $brush.Dispose()
-      }
-    })
-    $form.Add_MouseClick({
-      param($sender, $eventArgs)
-      if ($eventArgs.X -gt 625 -and $eventArgs.Y -gt 265) {
-        [System.IO.File]::WriteAllText($SignalPath, 'clicked')
-      }
-    })
-    $form.Add_Shown({ $form.Activate() })
-  }
-
-  [void]$form.ShowDialog()
-  exit 0
-}
 
 function Get-TestHash {
   param([string]$Text)
@@ -85,6 +15,7 @@ function Get-TestHash {
 
 function Test-AutomationMode {
   param(
+    [string]$HarnessExe,
     [string]$Mode,
     [string]$ExpectedMethod,
     [int]$TimeoutSeconds
@@ -94,10 +25,8 @@ function Test-AutomationMode {
   $signal = Join-Path $env:RUNNER_TEMP "ghost-send-$($Mode.ToLowerInvariant())-signal.txt"
   Remove-Item $signal -Force -ErrorAction SilentlyContinue
 
-  $quotedScript = '"' + $PSCommandPath + '"'
-  $quotedSignal = '"' + $signal + '"'
-  $arguments = "-NoLogo -NoProfile -STA -NonInteractive -ExecutionPolicy Bypass -File $quotedScript -Harness -HarnessMode $Mode -SignalPath $quotedSignal"
-  $harnessProcess = Start-Process powershell.exe -ArgumentList $arguments -WindowStyle Hidden -PassThru
+  $arguments = "`"$Mode`" `"$signal`""
+  $harnessProcess = Start-Process $HarnessExe -ArgumentList $arguments -PassThru
 
   try {
     $windowDeadline = [DateTime]::UtcNow.AddSeconds(12)
@@ -124,7 +53,11 @@ function Test-AutomationMode {
       -TargetKind Web `
       -TimeoutSeconds $TimeoutSeconds
     $automationExit = $LASTEXITCODE
-    $result = $output | Where-Object { $_ -match '^\{' } | Select-Object -Last 1 | ConvertFrom-Json
+    $resultLine = $output | Where-Object { $_ -match '^\{' } | Select-Object -Last 1
+    if (-not $resultLine) {
+      throw "$Mode automation returned no JSON result: $($output -join ' | ')"
+    }
+    $result = $resultLine | ConvertFrom-Json
 
     if ($automationExit -ne 0) {
       throw "$Mode automation exited with $automationExit: $($result.method): $($result.detail)"
@@ -147,5 +80,101 @@ function Test-AutomationMode {
   }
 }
 
-Test-AutomationMode 'Invoke' 'uia-invoke' 12
-Test-AutomationMode 'Coordinate' 'composer-adjacent-click' 14
+$harnessExe = Join-Path $env:RUNNER_TEMP 'GhostWhatsAppHarness.exe'
+Remove-Item $harnessExe -Force -ErrorAction SilentlyContinue
+$harnessSource = @'
+using System;
+using System.Drawing;
+using System.IO;
+using System.Windows.Forms;
+
+public static class GhostWhatsAppHarness
+{
+    [STAThread]
+    public static void Main(string[] args)
+    {
+        string mode = args.Length > 0 ? args[0] : "Invoke";
+        string signalPath = args.Length > 1 ? args[1] : "ghost-signal.txt";
+
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+
+        Form form = new Form();
+        form.Text = "WhatsApp " + mode + " Integration Test";
+        form.StartPosition = FormStartPosition.CenterScreen;
+        form.ClientSize = new Size(720, 360);
+        form.TopMost = true;
+
+        Label heading = new Label();
+        heading.Text = "Synthetic WhatsApp " + mode + " compose window";
+        heading.SetBounds(40, 35, 450, 28);
+        form.Controls.Add(heading);
+
+        if (mode == "Invoke")
+        {
+            TextBox messageBox = new TextBox();
+            messageBox.Text = "Ghost integration message";
+            messageBox.AccessibleName = "Type a message";
+            messageBox.SetBounds(40, 275, 540, 30);
+
+            Button sendButton = new Button();
+            sendButton.Text = "Send";
+            sendButton.AccessibleName = "Send";
+            sendButton.SetBounds(600, 268, 80, 42);
+            sendButton.Click += delegate
+            {
+                messageBox.Text = "";
+                File.WriteAllText(signalPath, "clicked");
+            };
+
+            form.Controls.Add(messageBox);
+            form.Controls.Add(sendButton);
+            form.Shown += delegate
+            {
+                form.Activate();
+                messageBox.Focus();
+            };
+        }
+        else
+        {
+            form.Paint += delegate(object sender, PaintEventArgs e)
+            {
+                using (SolidBrush brush = new SolidBrush(Color.FromArgb(95, 179, 179)))
+                {
+                    e.Graphics.FillEllipse(brush, 650, 290, 52, 52);
+                }
+            };
+            form.MouseClick += delegate(object sender, MouseEventArgs e)
+            {
+                if (e.X > 625 && e.Y > 265)
+                {
+                    File.WriteAllText(signalPath, "clicked");
+                }
+            };
+            form.Shown += delegate { form.Activate(); };
+        }
+
+        Application.Run(form);
+    }
+}
+'@
+
+try {
+  Add-Type -TypeDefinition $harnessSource `
+    -Language CSharp `
+    -ReferencedAssemblies @('System.Windows.Forms.dll', 'System.Drawing.dll') `
+    -OutputAssembly $harnessExe `
+    -OutputType WindowsApplication
+
+  Test-AutomationMode $harnessExe 'Invoke' 'uia-invoke' 12
+  Test-AutomationMode $harnessExe 'Coordinate' 'composer-adjacent-click' 14
+}
+catch {
+  $message = $_.Exception.Message.Replace("`r", ' ').Replace("`n", ' ')
+  Write-Host "::error file=.github/scripts/test-send-whatsapp.ps1,line=1,title=Windows Send integration failed::$message"
+  throw
+}
+finally {
+  Remove-Item $harnessExe -Force -ErrorAction SilentlyContinue
+  $global:LASTEXITCODE = 0
+}
