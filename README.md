@@ -1,29 +1,39 @@
-# Ghost (`v1.9.0`) — Windows & Android WhatsApp Scheduler
+# Ghost (`v1.9.1`) — Windows & Android WhatsApp Scheduler
 
 Ghost is a local WhatsApp scheduler with matching light and dark **Neumorphic Soft UI**, exact recurring schedules, multi-recipient dispatch, contact import, dynamic variables, and persistent queues.
 
-## What’s new in v1.9.0
+## What’s new in v1.9.1
 
-- **Windows desktop app**: Ghost now packages as a native Windows x64 `.exe` installer with Electron.
-- **Responsive wide-screen UI**: The same approved Soft UI, shadows, controls, branding, light theme, and dark theme are recomposed for large displays.
-- **Tray scheduling**: Closing the window keeps Ghost and its active schedules running in the Windows system tray.
-- **WhatsApp desktop control**: Ghost opens the correct compose route, activates a WhatsApp window, and issues the Send key through native Windows UI automation.
-- **Desktop contact import**: Import `.vcf`, CSV, text, or pasted contact lists without dummy data.
-- **Desktop queue parity**: Contacts, groups, personalized messages, dynamic variables, recurrence, pause/resume, send-now, history, and local persistence remain available.
-- **Safe Windows behavior**: Ghost requires an awake, unlocked, signed-in desktop and never attempts to bypass Windows sign-in or the lock screen.
+- **Reliable automatic Send**: Ghost now locates and invokes the real WhatsApp **Send** button with Windows UI Automation instead of blindly pressing Enter.
+- **Load-aware polling**: The desktop agent waits up to 18 seconds for WhatsApp and its accessible controls while the compose screen loads.
+- **Safer route verification**: When WhatsApp exposes composer text, Ghost verifies its SHA-256 against the intended pre-filled message before acting.
+- **Layered fallbacks**: Ghost tries `InvokePattern`, the accessible default action, and a UIA-derived clickable point in that order.
+- **Safe keyboard fallback**: Enter is used only after waiting for the Send control, locating the actual composer, foregrounding WhatsApp, and confirming keyboard focus.
+- **Better window targeting**: Ghost restores and foregrounds the real WhatsApp window while explicitly excluding its own scheduler window.
+- **Action diagnostics**: Dispatch history records the successful automation method or a precise failure reason; an invoked action is not marked sent when an observable composer fails to clear.
+- **Emergency stop**: Stopping a dispatch terminates any active PowerShell automation worker.
 
 ## Windows desktop release
 
-- Installer: `Ghost-Desktop-v1.9.0-x64-Setup.exe`
+- Installer: `Ghost-Desktop-v1.9.1-x64-Setup.exe`
 - Supported systems: Windows 10 and Windows 11, x64
 - Packaging: Electron + NSIS
 - Background mode: Windows system tray
 - Standard routing: WhatsApp Desktop protocol with official WhatsApp Web fallback
 - Business routing: Official WhatsApp Business Web compose route
 
-> **Windows signing note:** The first desktop installer is not code-signed. Microsoft SmartScreen may display an **Unknown Publisher** warning. Verify the SHA-256 file published beside the installer before running it.
+### Desktop capabilities
 
-> **Desktop automation requirement:** WhatsApp must already be signed in, and Windows must be awake and unlocked when a dispatch becomes due. UI automation can be affected by future WhatsApp interface changes.
+- Responsive wide-screen version of the approved light/dark Neumorphic UI
+- Contacts, groups, VCF/CSV/text import, multi-recipient dispatch, and dynamic variables
+- Once, daily, weekly, monthly, and custom recurrence
+- Persistent queue, history, pause/resume, send-now, and emergency stop
+- Optional Start with Windows
+- Direct Windows UI Automation of the WhatsApp Send control
+
+> **Windows signing note:** The desktop installer is not code-signed. Microsoft SmartScreen may display an **Unknown Publisher** warning. Verify the SHA-256 file published beside the installer before running it.
+
+> **Desktop automation requirement:** WhatsApp must already be signed in, and Windows must be awake and unlocked when a dispatch becomes due. Run Ghost and WhatsApp at the same normal privilege level; do not run only one of them as Administrator.
 
 ## Android release
 
@@ -61,4 +71,4 @@ npm run build:windows
 npm run build:apk
 ```
 
-The Windows release workflow builds and validates the installer on `windows-latest`, confirms its PE header, generates a SHA-256 checksum, and publishes both files when a `desktop-v*` tag is pushed.
+The Windows release workflow parses the PowerShell UI Automation script, runs the desktop tests, builds and validates the installer on `windows-latest`, confirms its PE header, generates SHA-256, and publishes both files when a `desktop-v*` tag is pushed.

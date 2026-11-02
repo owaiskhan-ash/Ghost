@@ -13,16 +13,16 @@ const {
 const { execFile } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
-const { promisify } = require('node:util');
 const {
   computeNextTrigger,
   createWhatsAppUrl,
+  hashAutomationMessage,
   isValidTask,
+  parseAutomationOutput,
   resolveMessageVariables,
   taskRecipients,
 } = require('./automation.cjs');
 
-const execFileAsync = promisify(execFile);
 const MAX_TIMER_DELAY = 24 * 60 * 60 * 1000;
 const MISSED_TASK_GRACE = 5 * 60 * 1000;
 const RECIPIENT_GAP = 2200;
@@ -35,9 +35,19 @@ let state = { tasks: [], receipts: [] };
 let dispatchGeneration = 0;
 let dispatchQueue = Promise.resolve();
 const taskTimers = new Map();
+const automationChildren = new Set();
 
 function desktopIconPath() {
   return path.join(__dirname, 'assets', 'desktop-icon.ico');
+}
+
+function desktopAutomationScriptPath() {
+  const bundledPath = path.join(__dirname, 'windows', 'send-whatsapp.ps1');
+  if (!app.isPackaged) return bundledPath;
+  return bundledPath.replace(
+    `${path.sep}app.asar${path.sep}`,
+    `${path.sep}app.asar.unpacked${path.sep}`
+  );
 }
 
 function emptyState() {
@@ -209,22 +219,25 @@ function emitTaskState(task) {
   });
 }
 
-function advanceOrFinishTask(task) {
+function advanceOrFinishTask(task, dispatchSucceeded) {
   const index = state.tasks.findIndex((candidate) => candidate.id === task.id);
   if (index < 0) return;
 
+  const lastSentAt = dispatchSucceeded
+    ? new Date().toISOString()
+    : state.tasks[index].lastSentAt;
   if (task.repeatMode === 'once') {
     state.tasks[index] = {
       ...state.tasks[index],
       enabled: false,
-      lastSentAt: new Date().toISOString(),
+      lastSentAt,
     };
   } else {
     const next = computeNextTrigger(task, Date.now());
     state.tasks[index] = {
       ...state.tasks[index],
       enabled: true,
-      lastSentAt: new Date().toISOString(),
+      lastSentAt,
       scheduledDate: next?.scheduledDate || task.scheduledDate,
       triggerAtMillis: next?.triggerAtMillis || task.triggerAtMillis,
     };
@@ -283,36 +296,87 @@ function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function pressSendInWhatsAppWindow() {
-  if (process.platform !== 'win32') return false;
-
-  const script = [
-    '$ErrorActionPreference = "Stop"',
-    `$ghostPid = ${process.pid}`,
-    '$windows = Get-Process | Where-Object { $_.Id -ne $ghostPid -and $_.MainWindowHandle -ne 0 -and ($_.ProcessName -match "WhatsApp" -or $_.MainWindowTitle -match "(^WhatsApp| - WhatsApp|WhatsApp Web)") }',
-    'if (-not $windows) { exit 2 }',
-    '$target = $windows | Select-Object -First 1',
-    '$keyboard = New-Object -ComObject WScript.Shell',
-    'if (-not $keyboard.AppActivate($target.Id)) { exit 3 }',
-    'Start-Sleep -Milliseconds 700',
-    '$keyboard.SendKeys("{ENTER}")',
-    'exit 0',
-  ].join('; ');
-
-  try {
-    await execFileAsync(
+function executeAutomation(args) {
+  return new Promise((resolve) => {
+    const child = execFile(
       'powershell.exe',
-      ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script],
-      { windowsHide: true, timeout: 12000 }
+      args,
+      {
+        windowsHide: true,
+        timeout: 24000,
+        maxBuffer: 1024 * 1024,
+      },
+      (error, stdout, stderr) => {
+        automationChildren.delete(child);
+        resolve({ error, stdout, stderr });
+      }
     );
-    return true;
-  } catch {
-    return false;
+    automationChildren.add(child);
+  });
+}
+
+function stopAutomationChildren() {
+  for (const child of automationChildren) {
+    if (!child.killed) child.kill();
   }
 }
 
+async function pressSendInWhatsAppWindow(expectedMessage, targetKind, generation) {
+  if (process.platform !== 'win32') {
+    return {
+      ok: false,
+      method: 'unsupported-platform',
+      detail: 'Windows UI Automation is available only on Windows.',
+    };
+  }
+
+  const scriptPath = desktopAutomationScriptPath();
+  const args = [
+    '-NoLogo',
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    scriptPath,
+    '-GhostProcessId',
+    String(process.pid),
+    '-ExpectedMessageHash',
+    hashAutomationMessage(expectedMessage),
+    '-TargetKind',
+    targetKind,
+    '-TimeoutSeconds',
+    '18',
+  ];
+
+  const { error, stdout, stderr } = await executeAutomation(args);
+  const result = parseAutomationOutput(
+    stdout,
+    String(stderr || '').trim() || 'Could not invoke the WhatsApp Send control.'
+  );
+
+  if (generation !== dispatchGeneration && !result.ok) {
+    return {
+      ok: false,
+      method: 'stopped',
+      detail: 'Dispatch was stopped before the Send action completed.',
+    };
+  }
+
+  if (error || !result.ok) {
+    console.warn('WhatsApp Send automation did not complete:', result.detail);
+  }
+  return result;
+}
+
 async function openAndSend(task, recipient, generation) {
-  if (generation !== dispatchGeneration) return false;
+  if (generation !== dispatchGeneration) {
+    return {
+      ok: false,
+      method: 'stopped',
+      detail: 'Dispatch was stopped before WhatsApp opened.',
+    };
+  }
   const resolvedMessage = resolveMessageVariables(
     recipient.messageBody || task.messageBody,
     recipient.contactName || task.contactName,
@@ -323,24 +387,41 @@ async function openAndSend(task, recipient, generation) {
     recipient.contactPhone,
     resolvedMessage
   );
+  let targetKind = task.whatsappPackage === 'com.whatsapp' ? 'Desktop' : 'Web';
 
   try {
     await shell.openExternal(url, { activate: true });
   } catch {
-    if (task.whatsappPackage !== 'com.whatsapp') return false;
+    if (task.whatsappPackage !== 'com.whatsapp') {
+      return {
+        ok: false,
+        method: 'open-failed',
+        detail: 'Could not open the WhatsApp Business Web compose route.',
+      };
+    }
     const fallback = `https://web.whatsapp.com/send?phone=${encodeURIComponent(
       String(recipient.contactPhone || '').replace(/\D/g, '')
     )}&text=${encodeURIComponent(resolvedMessage)}`;
+    targetKind = 'Web';
     try {
       await shell.openExternal(fallback, { activate: true });
     } catch {
-      return false;
+      return {
+        ok: false,
+        method: 'open-failed',
+        detail: 'Could not open WhatsApp Desktop or WhatsApp Web.',
+      };
     }
   }
 
-  await delay(4500);
-  if (generation !== dispatchGeneration) return false;
-  return pressSendInWhatsAppWindow();
+  if (generation !== dispatchGeneration) {
+    return {
+      ok: false,
+      method: 'stopped',
+      detail: 'Dispatch was stopped before Send was invoked.',
+    };
+  }
+  return pressSendInWhatsAppWindow(resolvedMessage, targetKind, generation);
 }
 
 function queueDispatch(task, manual) {
@@ -359,21 +440,28 @@ async function performDispatch(task, manual) {
   for (let index = 0; index < recipients.length; index += 1) {
     if (generation !== dispatchGeneration) break;
     const recipient = recipients[index];
-    const sent = await openAndSend(task, recipient, generation);
+    const sendResult = await openAndSend(task, recipient, generation);
+    const receiptStatus = sendResult.ok
+      ? 'SENT'
+      : sendResult.method === 'stopped'
+        ? 'STOPPED'
+        : 'FAILED';
     const receipt = makeReceipt(
       task,
       recipient,
-      sent ? 'SENT' : 'STOPPED',
-      sent
-        ? 'WhatsApp window activated and Send key issued.'
-        : 'Could not activate an unlocked WhatsApp window.'
+      receiptStatus,
+      `${sendResult.method}: ${sendResult.detail}`
     );
     storeReceipt(receipt);
-    if (sent) successful += 1;
-    if (index + 1 < recipients.length) await delay(RECIPIENT_GAP);
+    if (sendResult.ok) successful += 1;
+    if (index + 1 < recipients.length && generation === dispatchGeneration) {
+      await delay(RECIPIENT_GAP);
+    }
   }
 
-  if (!manual && generation === dispatchGeneration) advanceOrFinishTask(task);
+  if (!manual && generation === dispatchGeneration) {
+    advanceOrFinishTask(task, successful === recipients.length);
+  }
 
   if (Notification.isSupported()) {
     new Notification({
@@ -389,6 +477,7 @@ async function performDispatch(task, manual) {
 
 function emergencyStop() {
   dispatchGeneration += 1;
+  stopAutomationChildren();
   sendToRenderer('ghost:dispatch-stopped', { stoppedAt: Date.now() });
 }
 
@@ -500,6 +589,7 @@ if (!hasSingleInstanceLock) {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  stopAutomationChildren();
   saveState();
 });
 

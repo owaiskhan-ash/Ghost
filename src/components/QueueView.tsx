@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   Check,
+  CircleAlert,
   Clock,
   Layers,
   Pause,
@@ -33,6 +34,8 @@ export const QueueView: React.FC<QueueViewProps> = ({
 
   const activeCount = tasks.filter((t) => t.enabled).length;
   const pausedCount = tasks.length - activeCount;
+  const deliveredCount = history.filter((item) => item.status === 'SENT').length;
+  const attentionCount = history.length - deliveredCount;
 
   return (
     <div className="queue-view soft-screen grid grid-cols-12">
@@ -69,12 +72,19 @@ export const QueueView: React.FC<QueueViewProps> = ({
           view === 'sent' ? 'is-active' : ''
         }`}
       >
-        <span className="soft-icon-well">
-          <Check />
-        </span>
+        <div className="flex items-start justify-between gap-2">
+          <span className="soft-icon-well">
+            <Check />
+          </span>
+          {attentionCount > 0 && (
+            <span className="text-[10px] font-medium danger-action">
+              {attentionCount} need attention
+            </span>
+          )}
+        </div>
         <div>
           <div className="soft-stat-number">
-            {String(history.length).padStart(2, '0')}
+            {String(deliveredCount).padStart(2, '0')}
           </div>
           <div className="soft-stat-label mt-2">Delivered</div>
         </div>
@@ -200,34 +210,39 @@ export const QueueView: React.FC<QueueViewProps> = ({
           </p>
         </div>
       ) : (
-        history.map((item) => (
-          <div key={item.id} className="col-span-12 soft-history-row">
-            <span
-              className={`soft-icon-well ${
-                item.status === 'SENT' ? 'text-ghost-accent' : 'danger-action'
-              }`}
-            >
-              {item.status === 'SENT' ? <Check /> : <Pause />}
-            </span>
-            <div className="soft-row-copy">
-              <div className="soft-row-title">{item.contactName}</div>
-              <div className="soft-row-meta">
-                {item.sentAt} ·{' '}
-                {item.whatsappPackage === 'com.whatsapp.w4b'
-                  ? 'WA Business'
-                  : 'WhatsApp'}{' '}
-                · “{item.messageBody}”
+        history.map((item) => {
+          const isSent = item.status === 'SENT';
+          const isFailed = item.status === 'FAILED';
+          return (
+            <div key={item.id} className="col-span-12 soft-history-row">
+              <span
+                className={`soft-icon-well ${
+                  isSent ? 'text-ghost-accent' : 'danger-action'
+                }`}
+              >
+                {isSent ? <Check /> : isFailed ? <CircleAlert /> : <Pause />}
+              </span>
+              <div className="soft-row-copy">
+                <div className="soft-row-title">{item.contactName}</div>
+                <div className="soft-row-meta" title={item.detail}>
+                  {item.sentAt} ·{' '}
+                  {item.whatsappPackage === 'com.whatsapp.w4b'
+                    ? 'WA Business'
+                    : 'WhatsApp'}{' '}
+                  · “{item.messageBody}”
+                  {item.detail ? ` · ${item.detail}` : ''}
+                </div>
               </div>
+              <span
+                className={`soft-pill ${
+                  isSent ? 'text-ghost-accent' : 'danger-action'
+                }`}
+              >
+                {isSent ? 'Sent' : isFailed ? 'Failed' : 'Stopped'}
+              </span>
             </div>
-            <span
-              className={`soft-pill ${
-                item.status === 'SENT' ? 'text-ghost-accent' : 'danger-action'
-              }`}
-            >
-              {item.status === 'SENT' ? 'Sent' : 'Stopped'}
-            </span>
-          </div>
-        ))
+          );
+        })
       )}
     </div>
   );

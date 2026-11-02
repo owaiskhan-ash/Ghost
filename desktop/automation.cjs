@@ -1,5 +1,7 @@
 'use strict';
 
+const { createHash } = require('node:crypto');
+
 const TARGET_WHATSAPP = 'com.whatsapp';
 const TARGET_WHATSAPP_BUSINESS = 'com.whatsapp.w4b';
 
@@ -170,6 +172,47 @@ function taskRecipients(task) {
   ];
 }
 
+function hashAutomationMessage(message) {
+  const normalized = String(message || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trimEnd();
+  return createHash('sha256').update(normalized, 'utf8').digest('hex');
+}
+
+function parseAutomationOutput(output, fallbackDetail = 'Windows automation did not return a result.') {
+  const lines = String(output || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .reverse();
+
+  for (const line of lines) {
+    try {
+      const parsed = JSON.parse(line);
+      if (
+        typeof parsed.ok === 'boolean' &&
+        typeof parsed.method === 'string' &&
+        typeof parsed.detail === 'string'
+      ) {
+        return {
+          ok: parsed.ok,
+          method: parsed.method,
+          detail: parsed.detail,
+        };
+      }
+    } catch {
+      // Ignore PowerShell diagnostics and continue to the JSON result line.
+    }
+  }
+
+  return {
+    ok: false,
+    method: 'automation-error',
+    detail: fallbackDetail,
+  };
+}
+
 function isValidTask(task) {
   return Boolean(
     task &&
@@ -193,8 +236,10 @@ module.exports = {
   computeNextTrigger,
   createWhatsAppUrl,
   formatDateYmd,
+  hashAutomationMessage,
   isValidTask,
   normalizePhone,
+  parseAutomationOutput,
   resolveMessageVariables,
   taskRecipients,
 };

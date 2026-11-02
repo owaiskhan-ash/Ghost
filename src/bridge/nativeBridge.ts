@@ -333,6 +333,7 @@ export function loadNativeReceipts(): SentHistoryItem[] {
         whatsappPackage: isBiz ? 'com.whatsapp.w4b' : 'com.whatsapp',
         sentAt,
         status: r.outcome === 'SENT' ? 'SENT' : 'STOPPED',
+        detail: r.reasonDetail,
       };
     });
   } catch {

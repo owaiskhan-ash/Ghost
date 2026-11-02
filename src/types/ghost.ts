@@ -60,7 +60,8 @@ export interface SentHistoryItem {
   messageBody: string;
   whatsappPackage?: TargetWhatsApp;
   sentAt: string;
-  status: 'SENT' | 'STOPPED';
+  status: 'SENT' | 'STOPPED' | 'FAILED';
+  detail?: string;
 }
 
 export interface AndroidDeviceStatus {

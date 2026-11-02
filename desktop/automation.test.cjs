@@ -5,8 +5,10 @@ const assert = require('node:assert/strict');
 const {
   computeNextTrigger,
   createWhatsAppUrl,
+  hashAutomationMessage,
   isValidTask,
   normalizePhone,
+  parseAutomationOutput,
   resolveMessageVariables,
   taskRecipients,
 } = require('./automation.cjs');
@@ -96,6 +98,43 @@ test('clamps monthly schedules to the final day of short months', () => {
     from
   );
   assert.equal(result.scheduledDate, '2027-02-28');
+});
+
+test('hashes normalized composer text for safe route verification', () => {
+  assert.equal(
+    hashAutomationMessage('Hello\r\nworld   '),
+    '46e0ea795802f17d0b340983ca7d7068c94d7d9172ee4daea37a1ab1168649ec'
+  );
+});
+
+test('parses the structured PowerShell UI Automation result', () => {
+  assert.deepEqual(
+    parseAutomationOutput(
+      'diagnostic line\n{"ok":true,"method":"uia-invoke","detail":"Send invoked."}\n'
+    ),
+    { ok: true, method: 'uia-invoke', detail: 'Send invoked.' }
+  );
+});
+
+test('preserves structured PowerShell automation failures', () => {
+  assert.deepEqual(
+    parseAutomationOutput(
+      '{"ok":false,"method":"composer-mismatch","detail":"Expected message was not loaded."}'
+    ),
+    {
+      ok: false,
+      method: 'composer-mismatch',
+      detail: 'Expected message was not loaded.',
+    }
+  );
+});
+
+test('returns a safe failure when PowerShell has no structured result', () => {
+  assert.deepEqual(parseAutomationOutput('unexpected output', 'Timed out.'), {
+    ok: false,
+    method: 'automation-error',
+    detail: 'Timed out.',
+  });
 });
 
 test('validates single and batch desktop tasks', () => {

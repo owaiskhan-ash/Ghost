@@ -65,7 +65,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
     ? [
         {
           label: 'Windows UI Automation',
-          sub: 'Activates WhatsApp and issues the Send key',
+          sub: 'Finds and invokes the WhatsApp Send button',
           ok: true,
           target: 'accessibility',
         },
