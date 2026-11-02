@@ -1,7 +1,7 @@
 {
   "name": "ghost-whatsapp-scheduler",
   "private": true,
-  "version": "1.9.3",
+  "version": "1.9.4",
   "description": "Ghost — responsive Windows and Android WhatsApp scheduler",
   "type": "module",
   "scripts": {
