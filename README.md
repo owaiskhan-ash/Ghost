@@ -1,20 +1,18 @@
-# Ghost (`v1.9.2`) — Windows & Android WhatsApp Scheduler
+# Ghost (`v1.9.3`) — Windows & Android WhatsApp Scheduler
 
 Ghost is a local WhatsApp scheduler with matching light and dark **Neumorphic Soft UI**, exact recurring schedules, multi-recipient dispatch, contact import, dynamic variables, and persistent queues.
 
-## What’s new in v1.9.2
+## What’s new in v1.9.3
 
-- **Modern WhatsApp control discovery**: Ghost now recognizes custom Chromium controls as well as standard Windows buttons and editors.
-- **Point-based UIA discovery**: The desktop worker probes the visible composer/footer when controls are missing from the normal accessibility tree.
-- **Physical Send fallback**: If WhatsApp hides its footer controls from UI Automation, Ghost clicks the settled Send position beside the composer before considering Enter.
-- **No misleading permission switch**: Settings now explains that Windows has no automation permission prompt and that Ghost/WhatsApp must run at the same privilege level.
-- **Visible failure diagnostics**: A failed desktop dispatch automatically opens History, displays the full reason, and includes it in the Windows notification.
-- **Real Windows integration tests**: CI opens synthetic WhatsApp windows and verifies both an accessible Send-control click and the hidden-control coordinate fallback.
-- **Existing safeguards retained**: Expected-message verification, foreground checks, delayed focused-Enter fallback, Emergency Stop, and structured receipts remain active.
+- **Faster automatic Send**: Removes the fixed eight-second wait before the hidden-control fallback.
+- **Adaptive timing**: A verified composer can use the Send-position fallback after about one second; WhatsApp builds exposing no accessibility details use it after about 2.6 seconds.
+- **Quicker direct control**: Accessible Send buttons are attempted after the initial half-second stabilization period.
+- **Safe behavior retained**: Message verification, foreground checks, custom Chromium control discovery, focused-Enter fallback, Emergency Stop, and visible diagnostics remain active.
+- **Timing regression test**: Windows CI now fails if either the accessible-control or hidden-control path exceeds its latency budget.
 
 ## Windows desktop release
 
-- Installer: `Ghost-Desktop-v1.9.2-x64-Setup.exe`
+- Installer: `Ghost-Desktop-v1.9.3-x64-Setup.exe`
 - Supported systems: Windows 10 and Windows 11, x64
 - Packaging: Electron + NSIS
 - Background mode: Windows system tray

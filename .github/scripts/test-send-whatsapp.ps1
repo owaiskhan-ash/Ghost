@@ -18,7 +18,8 @@ function Test-AutomationMode {
     [string]$HarnessExe,
     [string]$Mode,
     [string]$ExpectedMethodPattern,
-    [int]$TimeoutSeconds
+    [int]$TimeoutSeconds,
+    [int]$MaxMilliseconds
   )
 
   $automationScript = Resolve-Path (Join-Path $PSScriptRoot '..\..\desktop\windows\send-whatsapp.ps1')
@@ -45,6 +46,7 @@ function Test-AutomationMode {
       throw "Synthetic $Mode WhatsApp window did not become available"
     }
 
+    $timer = [System.Diagnostics.Stopwatch]::StartNew()
     $output = & powershell.exe -NoLogo -NoProfile -NonInteractive `
       -ExecutionPolicy Bypass `
       -File $automationScript `
@@ -53,6 +55,7 @@ function Test-AutomationMode {
       -TargetKind Web `
       -TimeoutSeconds $TimeoutSeconds
     $automationExit = $LASTEXITCODE
+    $timer.Stop()
     $resultLine = $output | Where-Object { $_ -match '^\{' } | Select-Object -Last 1
     if (-not $resultLine) {
       throw "$Mode automation returned no JSON result: $($output -join ' | ')"
@@ -68,8 +71,11 @@ function Test-AutomationMode {
     if (-not (Test-Path $signal -PathType Leaf)) {
       throw "Synthetic $Mode Send target was not activated"
     }
+    if ($timer.ElapsedMilliseconds -gt $MaxMilliseconds) {
+      throw "$Mode automation took $($timer.ElapsedMilliseconds) ms; expected at most $MaxMilliseconds ms"
+    }
 
-    Write-Host "Windows $Mode integration passed: $($result.method)"
+    Write-Host "Windows $Mode integration passed in $($timer.ElapsedMilliseconds) ms: $($result.method)"
   }
   finally {
     if ($harnessProcess -and -not $harnessProcess.HasExited) {
@@ -166,8 +172,8 @@ try {
     -OutputAssembly $harnessExe `
     -OutputType WindowsApplication
 
-  Test-AutomationMode $harnessExe 'Invoke' '^uia-(invoke|default-action|clickable-point)$' 12
-  Test-AutomationMode $harnessExe 'Coordinate' '^composer-adjacent-click$' 14
+  Test-AutomationMode $harnessExe 'Invoke' '^uia-(invoke|default-action|clickable-point)$' 12 6000
+  Test-AutomationMode $harnessExe 'Coordinate' '^composer-adjacent-click$' 14 7500
 }
 catch {
   $message = $_.Exception.Message.Replace("`r", ' ').Replace("`n", ' ')

@@ -51,9 +51,10 @@ $MouseLeftUp = 0x0004
 $RestoreWindow = 9
 $startedAt = [DateTime]::UtcNow
 $deadline = $startedAt.AddSeconds($TimeoutSeconds)
-$unverifiedActionAt = $startedAt.AddMilliseconds(4000)
-$coordinateFallbackAt = $startedAt.AddMilliseconds([Math]::Min(8000, $TimeoutSeconds * 500))
-$enterFallbackAt = $startedAt.AddMilliseconds([Math]::Min(14000, $TimeoutSeconds * 780))
+$verifiedCoordinateFallbackAt = $startedAt.AddMilliseconds(1000)
+$unverifiedActionAt = $startedAt.AddMilliseconds(2200)
+$unverifiedCoordinateFallbackAt = $startedAt.AddMilliseconds(2600)
+$enterFallbackAt = $startedAt.AddMilliseconds([Math]::Min(9000, $TimeoutSeconds * 600))
 $sendNamePattern = '^(send|send message|enviar|envoyer|senden|invia|invia messaggio|kirim)(\s*\(.*\))?$'
 $messageNamePattern = '^(type a message|message|write a message|enter a message)$'
 
@@ -597,7 +598,7 @@ function Confirm-ComposerChanged {
 }
 
 # Avoid acting on a stale Send button while the compose deep link starts loading.
-Start-Sleep -Milliseconds 900
+Start-Sleep -Milliseconds 500
 
 $lastWindowTitle = ''
 $sawWindow = $false
@@ -673,7 +674,14 @@ while ([DateTime]::UtcNow -lt $deadline) {
     # Some WhatsApp Desktop builds expose the window but hide the footer controls
     # from UI Automation. Click the expected Send point beside the verified
     # composer (or the settled bottom-right Send slot) before trying a key.
-    if ([DateTime]::UtcNow -ge $coordinateFallbackAt) {
+    $coordinateFallbackDue = (
+      $composer.matches -and
+      [DateTime]::UtcNow -ge $verifiedCoordinateFallbackAt
+    ) -or (
+      -not $composer.available -and
+      [DateTime]::UtcNow -ge $unverifiedCoordinateFallbackAt
+    )
+    if ($coordinateFallbackDue) {
       if (Click-ComposerAdjacentSendPoint $root $editor $handle) {
         if ($composer.matches -and -not (Confirm-ComposerChanged $handle)) {
           Write-GhostResult $false 'send-unconfirmed' "Clicked the WhatsApp Send position in '$lastWindowTitle', but the composer did not clear." 5

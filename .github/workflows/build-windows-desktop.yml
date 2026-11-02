@@ -133,19 +133,16 @@ jobs:
         shell: pwsh
         run: |
           @"
-          Ghost Desktop v1.9.2 adds compatibility fallbacks for WhatsApp Desktop builds that hide their Send controls from the standard accessibility tree.
+          Ghost Desktop v1.9.3 makes automatic Send substantially faster while retaining the v1.9.2 WhatsApp compatibility fallbacks.
 
           ## What changed
 
-          - Recognizes custom Chromium controls in addition to standard Windows buttons and editors
-          - Probes the visible WhatsApp footer with UI Automation point discovery
-          - Clicks the settled Send position beside the composer when WhatsApp exposes no actionable control
-          - Keeps InvokePattern, accessible default action, and UIA clickable-point methods as first choices
-          - Uses Enter only as a late fallback after locating and focusing the composer
-          - Clarifies that Windows has no automation permission prompt
-          - Opens History automatically on failure and displays the full diagnostic reason
-          - Cancels the active automation worker when Emergency Stop is used
-          - Retains expected-message checks, foreground checks, responsive Soft UI, tray scheduling, contacts, groups, recurrence, and queue persistence
+          - Removes the fixed eight-second wait before the hidden-control Send click
+          - Uses the fallback after about one second when the composer text is verified
+          - Uses the fallback after about 2.6 seconds when WhatsApp exposes no accessibility details
+          - Attempts accessible Send controls after a half-second stabilization period
+          - Keeps expected-message verification, foreground checks, custom Chromium control discovery, and safe focused-Enter fallback
+          - Retains full failure diagnostics, Emergency Stop, responsive Soft UI, tray scheduling, contacts, groups, recurrence, and queue persistence
 
           ## Requirements and safety
 
@@ -161,7 +158,8 @@ jobs:
           - TypeScript and Vite production build passed
           - Desktop scheduling, routing, and automation-result tests passed
           - PowerShell UI Automation script parsed and smoke-tested on Windows PowerShell
-          - Synthetic WhatsApp window confirmed real UIA Send-button invocation
+          - Synthetic WhatsApp windows confirmed accessible and hidden-control Send paths
+          - Both Windows integration paths completed within enforced latency budgets
           - Packaged ASAR-unpacked automation resource verified
           - Electron Builder produced an NSIS x64 installer
           - Windows PE MZ header verified
@@ -178,5 +176,5 @@ jobs:
             "${{ steps.validate.outputs.installer }}" `
             "releases/desktop/SHA256SUMS.txt" `
             --verify-tag `
-            --title "Ghost Desktop v1.9.2 — WhatsApp Control Compatibility" `
+            --title "Ghost Desktop v1.9.3 — Faster Automatic Send" `
             --notes-file "releases/desktop/release-notes.md"
