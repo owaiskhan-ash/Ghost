@@ -80,7 +80,7 @@ function Test-AutomationMode {
   }
 }
 
-$harnessExe = Join-Path $env:RUNNER_TEMP 'GhostWhatsAppHarness.exe'
+$harnessExe = Join-Path $env:RUNNER_TEMP 'GhostUiHarness.exe'
 Remove-Item $harnessExe -Force -ErrorAction SilentlyContinue
 $harnessSource = @'
 using System;
