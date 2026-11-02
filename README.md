@@ -9,7 +9,7 @@ Ghost is a local WhatsApp scheduler with matching light and dark **Neumorphic So
 - **Physical Send fallback**: If WhatsApp hides its footer controls from UI Automation, Ghost clicks the settled Send position beside the composer before considering Enter.
 - **No misleading permission switch**: Settings now explains that Windows has no automation permission prompt and that Ghost/WhatsApp must run at the same privilege level.
 - **Visible failure diagnostics**: A failed desktop dispatch automatically opens History, displays the full reason, and includes it in the Windows notification.
-- **Real Windows integration test**: CI opens a synthetic WhatsApp compose window and verifies the packaged automation invokes its actual Send button through `InvokePattern`.
+- **Real Windows integration tests**: CI opens synthetic WhatsApp windows and verifies both an accessible Send-control click and the hidden-control coordinate fallback.
 - **Existing safeguards retained**: Expected-message verification, foreground checks, delayed focused-Enter fallback, Emergency Stop, and structured receipts remain active.
 
 ## Windows desktop release

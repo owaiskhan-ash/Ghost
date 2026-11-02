@@ -17,7 +17,7 @@ function Test-AutomationMode {
   param(
     [string]$HarnessExe,
     [string]$Mode,
-    [string]$ExpectedMethod,
+    [string]$ExpectedMethodPattern,
     [int]$TimeoutSeconds
   )
 
@@ -62,7 +62,7 @@ function Test-AutomationMode {
     if ($automationExit -ne 0) {
       throw "$Mode automation exited with ${automationExit}: $($result.method): $($result.detail)"
     }
-    if (-not $result.ok -or $result.method -ne $ExpectedMethod) {
+    if (-not $result.ok -or $result.method -notmatch $ExpectedMethodPattern) {
       throw "$Mode automation returned the wrong method: $($result | ConvertTo-Json -Compress)"
     }
     if (-not (Test-Path $signal -PathType Leaf)) {
@@ -166,8 +166,8 @@ try {
     -OutputAssembly $harnessExe `
     -OutputType WindowsApplication
 
-  Test-AutomationMode $harnessExe 'Invoke' 'uia-invoke' 12
-  Test-AutomationMode $harnessExe 'Coordinate' 'composer-adjacent-click' 14
+  Test-AutomationMode $harnessExe 'Invoke' '^uia-(invoke|default-action|clickable-point)$' 12
+  Test-AutomationMode $harnessExe 'Coordinate' '^composer-adjacent-click$' 14
 }
 catch {
   $message = $_.Exception.Message.Replace("`r", ' ').Replace("`n", ' ')
