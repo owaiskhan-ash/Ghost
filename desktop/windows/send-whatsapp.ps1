@@ -51,10 +51,11 @@ $MouseLeftUp = 0x0004
 $RestoreWindow = 9
 $startedAt = [DateTime]::UtcNow
 $deadline = $startedAt.AddSeconds($TimeoutSeconds)
-$verifiedCoordinateFallbackAt = $startedAt.AddMilliseconds(1000)
-$unverifiedActionAt = $startedAt.AddMilliseconds(2200)
-$unverifiedCoordinateFallbackAt = $startedAt.AddMilliseconds(2600)
+$verifiedCoordinateFallbackAt = $startedAt.AddMilliseconds(600)
+$unverifiedActionAt = $startedAt.AddMilliseconds(1600)
+$unverifiedCoordinateFallbackAt = $startedAt.AddMilliseconds(1900)
 $enterFallbackAt = $startedAt.AddMilliseconds([Math]::Min(9000, $TimeoutSeconds * 600))
+$pollMilliseconds = 75
 $sendNamePattern = '^(send|send message|enviar|envoyer|senden|invia|invia messaggio|kirim)(\s*\(.*\))?$'
 $messageNamePattern = '^(type a message|message|write a message|enter a message)$'
 
@@ -63,13 +64,15 @@ function Write-GhostResult {
     [bool]$Ok,
     [string]$Method,
     [string]$Detail,
-    [int]$ExitCode
+    [int]$ExitCode,
+    [bool]$Confirmed = $false
   )
 
   [ordered]@{
     ok = $Ok
     method = $Method
     detail = $Detail
+    confirmed = $Confirmed
   } | ConvertTo-Json -Compress | Write-Output
   exit $ExitCode
 }
@@ -100,16 +103,20 @@ function Focus-WhatsAppWindow {
     [IntPtr]$Handle
   )
 
+  if ([GhostDesktopWindowApi]::GetForegroundWindow() -eq $Handle) {
+    return $true
+  }
+
   [void][GhostDesktopWindowApi]::ShowWindowAsync($Handle, $RestoreWindow)
-  Start-Sleep -Milliseconds 100
+  Start-Sleep -Milliseconds 35
   [void][GhostDesktopWindowApi]::SetForegroundWindow($Handle)
-  Start-Sleep -Milliseconds 100
+  Start-Sleep -Milliseconds 40
 
   if ([GhostDesktopWindowApi]::GetForegroundWindow() -ne $Handle) {
     try {
       $keyboard = New-Object -ComObject WScript.Shell
       [void]$keyboard.AppActivate($Target.Id)
-      Start-Sleep -Milliseconds 120
+      Start-Sleep -Milliseconds 60
     }
     catch {}
   }
@@ -380,7 +387,7 @@ function Click-ComposerAdjacentSendPoint {
       return $false
     }
 
-    Start-Sleep -Milliseconds 100
+    Start-Sleep -Milliseconds 40
     [GhostDesktopWindowApi]::mouse_event($MouseLeftDown, 0, 0, 0, [UIntPtr]::Zero)
     [GhostDesktopWindowApi]::mouse_event($MouseLeftUp, 0, 0, 0, [UIntPtr]::Zero)
     return $true
@@ -533,7 +540,7 @@ function Invoke-SendElement {
       if (-not $cursorMoved -or [GhostDesktopWindowApi]::GetForegroundWindow() -ne $WindowHandle) {
         return $null
       }
-      Start-Sleep -Milliseconds 80
+      Start-Sleep -Milliseconds 40
       [GhostDesktopWindowApi]::mouse_event($MouseLeftDown, 0, 0, 0, [UIntPtr]::Zero)
       [GhostDesktopWindowApi]::mouse_event($MouseLeftUp, 0, 0, 0, [UIntPtr]::Zero)
       return 'uia-clickable-point'
@@ -558,7 +565,7 @@ function Send-FocusedEnter {
 
   try {
     $Editor.SetFocus()
-    Start-Sleep -Milliseconds 180
+    Start-Sleep -Milliseconds 60
     if (
       -not $Editor.Current.HasKeyboardFocus -or
       [GhostDesktopWindowApi]::GetForegroundWindow() -ne $WindowHandle
@@ -577,7 +584,7 @@ function Send-FocusedEnter {
 function Confirm-ComposerChanged {
   param(
     [IntPtr]$WindowHandle,
-    [int]$WaitMilliseconds = 2500
+    [int]$WaitMilliseconds = 1400
   )
 
   $confirmationDeadline = [DateTime]::UtcNow.AddMilliseconds($WaitMilliseconds)
@@ -591,14 +598,15 @@ function Confirm-ComposerChanged {
       }
     }
     catch {}
-    Start-Sleep -Milliseconds 150
+    Start-Sleep -Milliseconds 50
   }
 
   return $false
 }
 
-# Avoid acting on a stale Send button while the compose deep link starts loading.
-Start-Sleep -Milliseconds 500
+# Keep a short route-handoff guard because consecutive bulk recipients can use
+# identical message text; the hash alone cannot distinguish those two chats.
+Start-Sleep -Milliseconds 350
 
 $lastWindowTitle = ''
 $sawWindow = $false
@@ -613,11 +621,11 @@ while ([DateTime]::UtcNow -lt $deadline) {
     $target = Get-WhatsAppWindow
   }
   catch {
-    Start-Sleep -Milliseconds 250
+    Start-Sleep -Milliseconds $pollMilliseconds
     continue
   }
   if (-not $target) {
-    Start-Sleep -Milliseconds 250
+    Start-Sleep -Milliseconds $pollMilliseconds
     continue
   }
 
@@ -626,14 +634,14 @@ while ([DateTime]::UtcNow -lt $deadline) {
     $lastWindowTitle = $target.MainWindowTitle
     $handle = [IntPtr]$target.MainWindowHandle
     if (-not (Focus-WhatsAppWindow $target $handle)) {
-      Start-Sleep -Milliseconds 250
+      Start-Sleep -Milliseconds $pollMilliseconds
       continue
     }
     $sawFocusedWindow = $true
 
     $root = [System.Windows.Automation.AutomationElement]::FromHandle($handle)
     if (-not $root) {
-      Start-Sleep -Milliseconds 250
+      Start-Sleep -Milliseconds $pollMilliseconds
       continue
     }
 
@@ -648,7 +656,7 @@ while ([DateTime]::UtcNow -lt $deadline) {
     $composer = Test-ExpectedComposer $editor
     if ($composer.available -and -not $composer.matches) {
       $sawComposerMismatch = $true
-      Start-Sleep -Milliseconds 250
+      Start-Sleep -Milliseconds $pollMilliseconds
       continue
     }
 
@@ -657,17 +665,21 @@ while ([DateTime]::UtcNow -lt $deadline) {
       [DateTime]::UtcNow -ge $unverifiedActionAt
     )
     if (-not $composerReady) {
-      Start-Sleep -Milliseconds 250
+      Start-Sleep -Milliseconds $pollMilliseconds
       continue
     }
 
     if ($sendButton) {
       $method = Invoke-SendElement $sendButton $handle
       if ($method) {
-        if ($composer.matches -and -not (Confirm-ComposerChanged $handle)) {
-          Write-GhostResult $false 'send-unconfirmed' "Invoked the WhatsApp Send button in '$lastWindowTitle', but the composer did not clear." 5
+        $sendConfirmed = $false
+        if ($composer.matches) {
+          if (-not (Confirm-ComposerChanged $handle)) {
+            Write-GhostResult $false 'send-unconfirmed' "Invoked the WhatsApp Send button in '$lastWindowTitle', but the composer did not clear." 5
+          }
+          $sendConfirmed = $true
         }
-        Write-GhostResult $true $method "Invoked the WhatsApp Send button in '$lastWindowTitle'." 0
+        Write-GhostResult $true $method "Invoked the WhatsApp Send button in '$lastWindowTitle'." 0 $sendConfirmed
       }
     }
 
@@ -683,10 +695,14 @@ while ([DateTime]::UtcNow -lt $deadline) {
     )
     if ($coordinateFallbackDue) {
       if (Click-ComposerAdjacentSendPoint $root $editor $handle) {
-        if ($composer.matches -and -not (Confirm-ComposerChanged $handle)) {
-          Write-GhostResult $false 'send-unconfirmed' "Clicked the WhatsApp Send position in '$lastWindowTitle', but the composer did not clear." 5
+        $sendConfirmed = $false
+        if ($composer.matches) {
+          if (-not (Confirm-ComposerChanged $handle)) {
+            Write-GhostResult $false 'send-unconfirmed' "Clicked the WhatsApp Send position in '$lastWindowTitle', but the composer did not clear." 5
+          }
+          $sendConfirmed = $true
         }
-        Write-GhostResult $true 'composer-adjacent-click' "Clicked the WhatsApp Send position in '$lastWindowTitle'." 0
+        Write-GhostResult $true 'composer-adjacent-click' "Clicked the WhatsApp Send position in '$lastWindowTitle'." 0 $sendConfirmed
       }
     }
 
@@ -694,10 +710,14 @@ while ([DateTime]::UtcNow -lt $deadline) {
     # used only after the real composer has been located and focused.
     if ([DateTime]::UtcNow -ge $enterFallbackAt) {
       if (Send-FocusedEnter $editor $handle) {
-        if ($composer.matches -and -not (Confirm-ComposerChanged $handle)) {
-          Write-GhostResult $false 'send-unconfirmed' "Focused the WhatsApp composer and issued Enter in '$lastWindowTitle', but the composer did not clear." 5
+        $sendConfirmed = $false
+        if ($composer.matches) {
+          if (-not (Confirm-ComposerChanged $handle)) {
+            Write-GhostResult $false 'send-unconfirmed' "Focused the WhatsApp composer and issued Enter in '$lastWindowTitle', but the composer did not clear." 5
+          }
+          $sendConfirmed = $true
         }
-        Write-GhostResult $true 'focused-enter' "Focused the WhatsApp composer and issued Enter in '$lastWindowTitle'." 0
+        Write-GhostResult $true 'focused-enter' "Focused the WhatsApp composer and issued Enter in '$lastWindowTitle'." 0 $sendConfirmed
       }
       $sawEnterFailure = $true
     }
@@ -706,7 +726,7 @@ while ([DateTime]::UtcNow -lt $deadline) {
     # The accessibility tree can rebuild while WhatsApp loads. Poll again.
   }
 
-  Start-Sleep -Milliseconds 250
+  Start-Sleep -Milliseconds $pollMilliseconds
 }
 
 if (-not $sawWindow) {

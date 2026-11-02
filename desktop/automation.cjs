@@ -199,6 +199,7 @@ function parseAutomationOutput(output, fallbackDetail = 'Windows automation did 
           ok: parsed.ok,
           method: parsed.method,
           detail: parsed.detail,
+          confirmed: parsed.confirmed === true,
         };
       }
     } catch {
@@ -210,7 +211,13 @@ function parseAutomationOutput(output, fallbackDetail = 'Windows automation did 
     ok: false,
     method: 'automation-error',
     detail: fallbackDetail,
+    confirmed: false,
   };
+}
+
+function recipientHandoffDelay(result) {
+  if (!result || !result.ok) return 600;
+  return result.confirmed ? 75 : 300;
 }
 
 function isValidTask(task) {
@@ -240,6 +247,7 @@ module.exports = {
   isValidTask,
   normalizePhone,
   parseAutomationOutput,
+  recipientHandoffDelay,
   resolveMessageVariables,
   taskRecipients,
 };

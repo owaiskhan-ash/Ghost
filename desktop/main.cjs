@@ -19,13 +19,14 @@ const {
   hashAutomationMessage,
   isValidTask,
   parseAutomationOutput,
+  recipientHandoffDelay,
   resolveMessageVariables,
   taskRecipients,
 } = require('./automation.cjs');
 
 const MAX_TIMER_DELAY = 24 * 60 * 60 * 1000;
 const MISSED_TASK_GRACE = 5 * 60 * 1000;
-const RECIPIENT_GAP = 2200;
+const RECEIPT_CHECKPOINT_INTERVAL = 25;
 
 let mainWindow = null;
 let tray = null;
@@ -286,9 +287,9 @@ function makeReceipt(task, recipient, status, detail) {
   };
 }
 
-function storeReceipt(receipt) {
+function storeReceipt(receipt, persist = true) {
   state.receipts = [receipt, ...state.receipts].slice(0, 500);
-  saveState();
+  if (persist) saveState();
   sendToRenderer('ghost:receipt', receipt);
 }
 
@@ -453,11 +454,16 @@ async function performDispatch(task, manual) {
       receiptStatus,
       `${sendResult.method}: ${sendResult.detail}`
     );
-    storeReceipt(receipt);
+    const isLastRecipient = index + 1 === recipients.length;
+    const shouldCheckpoint =
+      !sendResult.ok ||
+      isLastRecipient ||
+      (index + 1) % RECEIPT_CHECKPOINT_INTERVAL === 0;
+    storeReceipt(receipt, shouldCheckpoint);
     if (sendResult.ok) successful += 1;
     else lastFailureDetail = `${sendResult.method}: ${sendResult.detail}`;
-    if (index + 1 < recipients.length && generation === dispatchGeneration) {
-      await delay(RECIPIENT_GAP);
+    if (!isLastRecipient && generation === dispatchGeneration) {
+      await delay(recipientHandoffDelay(sendResult));
     }
   }
 
@@ -480,6 +486,7 @@ async function performDispatch(task, manual) {
 function emergencyStop() {
   dispatchGeneration += 1;
   stopAutomationChildren();
+  saveState();
   sendToRenderer('ghost:dispatch-stopped', { stoppedAt: Date.now() });
 }
 
