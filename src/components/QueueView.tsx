@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Check,
   CircleAlert,
@@ -36,6 +36,11 @@ export const QueueView: React.FC<QueueViewProps> = ({
   const pausedCount = tasks.length - activeCount;
   const deliveredCount = history.filter((item) => item.status === 'SENT').length;
   const attentionCount = history.length - deliveredCount;
+  const latestReceipt = history[0];
+
+  useEffect(() => {
+    if (latestReceipt && latestReceipt.status !== 'SENT') setView('sent');
+  }, [latestReceipt?.id, latestReceipt?.status]);
 
   return (
     <div className="queue-view soft-screen grid grid-cols-12">
@@ -224,14 +229,16 @@ export const QueueView: React.FC<QueueViewProps> = ({
               </span>
               <div className="soft-row-copy">
                 <div className="soft-row-title">{item.contactName}</div>
-                <div className="soft-row-meta" title={item.detail}>
+                <div className="soft-row-meta">
                   {item.sentAt} ·{' '}
                   {item.whatsappPackage === 'com.whatsapp.w4b'
                     ? 'WA Business'
                     : 'WhatsApp'}{' '}
                   · “{item.messageBody}”
-                  {item.detail ? ` · ${item.detail}` : ''}
                 </div>
+                {!isSent && item.detail && (
+                  <div className="soft-failure-detail">{item.detail}</div>
+                )}
               </div>
               <span
                 className={`soft-pill ${

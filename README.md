@@ -1,21 +1,20 @@
-# Ghost (`v1.9.1`) — Windows & Android WhatsApp Scheduler
+# Ghost (`v1.9.2`) — Windows & Android WhatsApp Scheduler
 
 Ghost is a local WhatsApp scheduler with matching light and dark **Neumorphic Soft UI**, exact recurring schedules, multi-recipient dispatch, contact import, dynamic variables, and persistent queues.
 
-## What’s new in v1.9.1
+## What’s new in v1.9.2
 
-- **Reliable automatic Send**: Ghost now locates and invokes the real WhatsApp **Send** button with Windows UI Automation instead of blindly pressing Enter.
-- **Load-aware polling**: The desktop agent waits up to 18 seconds for WhatsApp and its accessible controls while the compose screen loads.
-- **Safer route verification**: When WhatsApp exposes composer text, Ghost verifies its SHA-256 against the intended pre-filled message before acting.
-- **Layered fallbacks**: Ghost tries `InvokePattern`, the accessible default action, and a UIA-derived clickable point in that order.
-- **Safe keyboard fallback**: Enter is used only after waiting for the Send control, locating the actual composer, foregrounding WhatsApp, and confirming keyboard focus.
-- **Better window targeting**: Ghost restores and foregrounds the real WhatsApp window while explicitly excluding its own scheduler window.
-- **Action diagnostics**: Dispatch history records the successful automation method or a precise failure reason; an invoked action is not marked sent when an observable composer fails to clear.
-- **Emergency stop**: Stopping a dispatch terminates any active PowerShell automation worker.
+- **Modern WhatsApp control discovery**: Ghost now recognizes custom Chromium controls as well as standard Windows buttons and editors.
+- **Point-based UIA discovery**: The desktop worker probes the visible composer/footer when controls are missing from the normal accessibility tree.
+- **Physical Send fallback**: If WhatsApp hides its footer controls from UI Automation, Ghost clicks the settled Send position beside the composer before considering Enter.
+- **No misleading permission switch**: Settings now explains that Windows has no automation permission prompt and that Ghost/WhatsApp must run at the same privilege level.
+- **Visible failure diagnostics**: A failed desktop dispatch automatically opens History, displays the full reason, and includes it in the Windows notification.
+- **Real Windows integration test**: CI opens a synthetic WhatsApp compose window and verifies the packaged automation invokes its actual Send button through `InvokePattern`.
+- **Existing safeguards retained**: Expected-message verification, foreground checks, delayed focused-Enter fallback, Emergency Stop, and structured receipts remain active.
 
 ## Windows desktop release
 
-- Installer: `Ghost-Desktop-v1.9.1-x64-Setup.exe`
+- Installer: `Ghost-Desktop-v1.9.2-x64-Setup.exe`
 - Supported systems: Windows 10 and Windows 11, x64
 - Packaging: Electron + NSIS
 - Background mode: Windows system tray

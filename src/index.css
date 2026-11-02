@@ -694,6 +694,14 @@ button[class*='bg-ghost-accent'] {
   text-overflow: ellipsis;
 }
 
+.soft-failure-detail {
+  margin-top: 4px;
+  color: var(--danger-color);
+  font-size: 0.68rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .soft-row-actions {
   flex-shrink: 0;
   display: flex;

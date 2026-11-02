@@ -52,8 +52,9 @@ $RestoreWindow = 9
 $startedAt = [DateTime]::UtcNow
 $deadline = $startedAt.AddSeconds($TimeoutSeconds)
 $unverifiedActionAt = $startedAt.AddMilliseconds(4000)
-$enterFallbackAt = $startedAt.AddMilliseconds([Math]::Min(12000, $TimeoutSeconds * 700))
-$sendNamePattern = '^(send|send message|enviar|envoyer|senden|invia|invia messaggio|kirim)$'
+$coordinateFallbackAt = $startedAt.AddMilliseconds([Math]::Min(8000, $TimeoutSeconds * 500))
+$enterFallbackAt = $startedAt.AddMilliseconds([Math]::Min(14000, $TimeoutSeconds * 780))
+$sendNamePattern = '^(send|send message|enviar|envoyer|senden|invia|invia messaggio|kirim)(\s*\(.*\))?$'
 $messageNamePattern = '^(type a message|message|write a message|enter a message)$'
 
 function Write-GhostResult {
@@ -147,6 +148,26 @@ function Test-ActionableElement {
   }
 }
 
+function Test-SendElement {
+  param([System.Windows.Automation.AutomationElement]$Element)
+
+  if (-not (Test-ActionableElement $Element)) {
+    return $false
+  }
+
+  try {
+    $name = "$(($Element.Current.Name))".Trim()
+    $automationId = "$(($Element.Current.AutomationId))".Trim()
+    return (
+      $name -match "(?i)$sendNamePattern" -or
+      $automationId -match '(?i)(^|[-_])(send|sendbutton|send-message)([-_]|$)'
+    )
+  }
+  catch {
+    return $false
+  }
+}
+
 function Find-SendButton {
   param([System.Windows.Automation.AutomationElement]$Root)
 
@@ -154,49 +175,41 @@ function Find-SendButton {
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
     [System.Windows.Automation.ControlType]::Button
   )
-
-  $buttons = $Root.FindAll(
-    [System.Windows.Automation.TreeScope]::Descendants,
-    $buttonCondition
+  $customCondition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::Custom
+  )
+  $candidateCondition = [System.Windows.Automation.OrCondition]::new(
+    [System.Windows.Automation.Condition[]]@(
+      $buttonCondition,
+      $customCondition
+    )
   )
 
-  $automationIdCandidate = $null
-  for ($index = 0; $index -lt $buttons.Count; $index += 1) {
-    $button = $buttons.Item($index)
-    try {
-      $name = "$(($button.Current.Name))".Trim()
-      $automationId = "$(($button.Current.AutomationId))".Trim()
-      if ($name -match "(?i)$sendNamePattern" -and (Test-ActionableElement $button)) {
-        return $button
-      }
-      if (
-        -not $automationIdCandidate -and
-        $automationId -match '(?i)(^|[-_])(send|sendbutton|send-message)([-_]|$)' -and
-        (Test-ActionableElement $button)
-      ) {
-        $automationIdCandidate = $button
-      }
-    }
-    catch {
-      continue
+  $candidates = $Root.FindAll(
+    [System.Windows.Automation.TreeScope]::Descendants,
+    $candidateCondition
+  )
+
+  for ($index = 0; $index -lt $candidates.Count; $index += 1) {
+    $candidate = $candidates.Item($index)
+    if (Test-SendElement $candidate) {
+      return $candidate
     }
   }
 
-  if ($automationIdCandidate) {
-    return $automationIdCandidate
-  }
-
+  # Chromium can expose the icon label as a Text child instead of a Button.
   $sendNameCondition = [System.Windows.Automation.PropertyCondition]::new(
     [System.Windows.Automation.AutomationElement]::NameProperty,
     'Send',
     [System.Windows.Automation.PropertyConditionFlags]::IgnoreCase
   )
-  $candidate = $Root.FindFirst(
+  $namedElement = $Root.FindFirst(
     [System.Windows.Automation.TreeScope]::Descendants,
     $sendNameCondition
   )
-  if (Test-ActionableElement $candidate) {
-    return $candidate
+  if (Test-ActionableElement $namedElement) {
+    return $namedElement
   }
 
   return $null
@@ -213,10 +226,15 @@ function Find-MessageEditor {
     [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
     [System.Windows.Automation.ControlType]::Document
   )
+  $customControlCondition = [System.Windows.Automation.PropertyCondition]::new(
+    [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+    [System.Windows.Automation.ControlType]::Custom
+  )
   $editCondition = [System.Windows.Automation.OrCondition]::new(
     [System.Windows.Automation.Condition[]]@(
       $editControlCondition,
-      $documentControlCondition
+      $documentControlCondition,
+      $customControlCondition
     )
   )
 
@@ -248,11 +266,9 @@ function Find-MessageEditor {
       }
 
       $label = Get-ElementText $editor
-      $isInComposerRegion = $rootThreshold -eq 0 -or $rectangle.Bottom -gt $rootThreshold
-      if (
-        $isInComposerRegion -and
-        ($label -match "(?i)$messageNamePattern" -or $label -match '(?i)(composer|message-input)')
-      ) {
+      $isNamedComposer = $label -match "(?i)$messageNamePattern" -or $label -match '(?i)(composer|message-input)'
+      $isInComposerRegion = $rootThreshold -eq 0 -or $rectangle.Top -gt $rootThreshold
+      if ($isNamedComposer -and ($rootThreshold -eq 0 -or $rectangle.Bottom -gt $rootThreshold)) {
         $namedCandidate = $editor
       }
       if ($isInComposerRegion) {
@@ -268,6 +284,109 @@ function Find-MessageEditor {
     return $namedCandidate
   }
   return $positionCandidate
+}
+
+function Find-SendElementFromPoint {
+  param(
+    [System.Windows.Automation.AutomationElement]$Root,
+    [System.Windows.Automation.AutomationElement]$Editor
+  )
+
+  try {
+    $rootRectangle = $Root.Current.BoundingRectangle
+    $points = New-Object System.Collections.Generic.List[System.Windows.Point]
+
+    if ($Editor) {
+      $editorRectangle = $Editor.Current.BoundingRectangle
+      $centerY = $editorRectangle.Top + ($editorRectangle.Height / 2)
+      foreach ($offset in @(22, 32, 44, 56)) {
+        $points.Add([System.Windows.Point]::new($editorRectangle.Right + $offset, $centerY))
+      }
+    }
+
+    foreach ($xOffset in @(26, 38, 50, 62)) {
+      foreach ($yOffset in @(26, 38, 50, 62)) {
+        $points.Add([System.Windows.Point]::new(
+          $rootRectangle.Right - $xOffset,
+          $rootRectangle.Bottom - $yOffset
+        ))
+      }
+    }
+
+    $walker = [System.Windows.Automation.TreeWalker]::ControlViewWalker
+    foreach ($point in $points) {
+      if (
+        $point.X -le $rootRectangle.Left -or
+        $point.X -ge $rootRectangle.Right -or
+        $point.Y -le $rootRectangle.Top -or
+        $point.Y -ge $rootRectangle.Bottom
+      ) {
+        continue
+      }
+
+      $element = [System.Windows.Automation.AutomationElement]::FromPoint($point)
+      for ($depth = 0; $depth -lt 6 -and $element; $depth += 1) {
+        if (Test-SendElement $element) {
+          return $element
+        }
+        $element = $walker.GetParent($element)
+      }
+    }
+  }
+  catch {}
+
+  return $null
+}
+
+function Click-ComposerAdjacentSendPoint {
+  param(
+    [System.Windows.Automation.AutomationElement]$Root,
+    [System.Windows.Automation.AutomationElement]$Editor,
+    [IntPtr]$WindowHandle
+  )
+
+  if ([GhostDesktopWindowApi]::GetForegroundWindow() -ne $WindowHandle) {
+    return $false
+  }
+
+  try {
+    $rootRectangle = $Root.Current.BoundingRectangle
+    if ($Editor) {
+      $editorRectangle = $Editor.Current.BoundingRectangle
+      $x = [Math]::Min($rootRectangle.Right - 24, $editorRectangle.Right + 34)
+      $y = $editorRectangle.Top + ($editorRectangle.Height / 2)
+    }
+    else {
+      # WhatsApp swaps the bottom-right voice control for Send when text exists.
+      $x = $rootRectangle.Right - 38
+      $y = $rootRectangle.Bottom - 38
+    }
+
+    if (
+      $x -le $rootRectangle.Left + ($rootRectangle.Width * 0.55) -or
+      $x -ge $rootRectangle.Right -or
+      $y -le $rootRectangle.Top + ($rootRectangle.Height * 0.55) -or
+      $y -ge $rootRectangle.Bottom
+    ) {
+      return $false
+    }
+
+    $cursorMoved = [GhostDesktopWindowApi]::SetCursorPos(
+      [int][Math]::Round($x),
+      [int][Math]::Round($y)
+    )
+    if (-not $cursorMoved -or [GhostDesktopWindowApi]::GetForegroundWindow() -ne $WindowHandle) {
+      return $false
+    }
+
+    Start-Sleep -Milliseconds 100
+    [GhostDesktopWindowApi]::mouse_event($MouseLeftDown, 0, 0, 0, [UIntPtr]::Zero)
+    [GhostDesktopWindowApi]::mouse_event($MouseLeftUp, 0, 0, 0, [UIntPtr]::Zero)
+    return $true
+  }
+  catch {
+    return $false
+  }
 }
 
 function Get-EditorTextState {
@@ -519,6 +638,9 @@ while ([DateTime]::UtcNow -lt $deadline) {
 
     $editor = Find-MessageEditor $root
     $sendButton = Find-SendButton $root
+    if (-not $sendButton) {
+      $sendButton = Find-SendElementFromPoint $root $editor
+    }
     if ($editor) { $sawEditor = $true }
     if ($sendButton) { $sawSendButton = $true }
 
@@ -530,7 +652,6 @@ while ([DateTime]::UtcNow -lt $deadline) {
     }
 
     $composerReady = $composer.matches -or (
-      $editor -and
       -not $composer.available -and
       [DateTime]::UtcNow -ge $unverifiedActionAt
     )
@@ -546,6 +667,18 @@ while ([DateTime]::UtcNow -lt $deadline) {
           Write-GhostResult $false 'send-unconfirmed' "Invoked the WhatsApp Send button in '$lastWindowTitle', but the composer did not clear." 5
         }
         Write-GhostResult $true $method "Invoked the WhatsApp Send button in '$lastWindowTitle'." 0
+      }
+    }
+
+    # Some WhatsApp Desktop builds expose the window but hide the footer controls
+    # from UI Automation. Click the expected Send point beside the verified
+    # composer (or the settled bottom-right Send slot) before trying a key.
+    if ([DateTime]::UtcNow -ge $coordinateFallbackAt) {
+      if (Click-ComposerAdjacentSendPoint $root $editor $handle) {
+        if ($composer.matches -and -not (Confirm-ComposerChanged $handle)) {
+          Write-GhostResult $false 'send-unconfirmed' "Clicked the WhatsApp Send position in '$lastWindowTitle', but the composer did not clear." 5
+        }
+        Write-GhostResult $true 'composer-adjacent-click' "Clicked the WhatsApp Send position in '$lastWindowTitle'." 0
       }
     }
 
