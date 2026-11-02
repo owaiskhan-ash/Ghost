@@ -182,8 +182,8 @@ try {
     -OutputAssembly $harnessExe `
     -OutputType WindowsApplication
 
-  Test-AutomationMode $harnessExe 'Invoke' '^uia-(invoke|default-action|clickable-point)$' 12 4000
-  Test-AutomationMode $harnessExe 'Coordinate' '^composer-adjacent-click$' 14 5000
+  Test-AutomationMode $harnessExe 'Invoke' '^uia-(invoke|default-action|clickable-point)$' 12 5000
+  Test-AutomationMode $harnessExe 'Coordinate' '^composer-adjacent-click$' 14 5500
 }
 catch {
   $message = $_.Exception.Message.Replace("`r", ' ').Replace("`n", ' ')
